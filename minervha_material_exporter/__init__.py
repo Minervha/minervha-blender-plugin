@@ -1,44 +1,25 @@
 """Minervha Material Exporter — Blender 4.2+ extension.
 
 Exports a Blender scene's materials to Wild Life, two ways:
-  * a `texture_usage.txt` read by Minervha Studio's injector, or
-  * a self-contained `.wlsave` collection bundle (JSON + textures).
+  * a `texture_usage.txt` read by Minervha Studio's injector (mode A), or
+  * a self-contained `.wlsave` collection bundle (JSON + textures) (mode B).
 
-Scaffold (chunk 1): registers a placeholder N-panel so the extension is
-installable and verifiable. The real UI (scope dropdown, export operators)
-lands in chunk 6 (ui.py); introspection / mapping / serializers in chunks 2-5.
+The UI (the "Minervha" N-panel + export operators) lives in ui.py; the data layers
+are introspect/mapper/wlsave_export/txt_export over the shared bsdf_trace core.
 
-Note: as a Blender 4.2+ Extension this module carries NO `bl_info` — the
-`blender_manifest.toml` replaces it.
+As a Blender 4.2+ Extension this module carries NO `bl_info` — blender_manifest.toml
+replaces it.
 """
 
-import bpy
-
-
-class MINERVHA_PT_exporter(bpy.types.Panel):
-    bl_label = "Minervha Material Exporter"
-    bl_idname = "MINERVHA_PT_exporter"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Minervha"
-
-    def draw(self, context):
-        layout = self.layout
-        layout.label(text="Installed", icon="CHECKMARK")
-        col = layout.column(align=True)
-        col.enabled = False
-        col.label(text="Export .txt (coming soon)")
-        col.label(text="Export .wlsave (coming soon)")
-
-
-_classes = (MINERVHA_PT_exporter,)
+try:
+    from . import ui          # packaged extension
+except ImportError:           # dev / sys.path import
+    import ui
 
 
 def register():
-    for cls in _classes:
-        bpy.utils.register_class(cls)
+    ui.register()
 
 
 def unregister():
-    for cls in reversed(_classes):
-        bpy.utils.unregister_class(cls)
+    ui.unregister()
