@@ -8,13 +8,14 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 0.46,
         "g": 0.42,
         "b": 0.22,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
       "roughness": 0.1,
       "normalMapAmplification": 1,
@@ -38,6 +39,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -63,13 +65,14 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 1,
         "g": 1,
         "b": 1,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
       "roughness": 0.5,
       "normalMapAmplification": 1,
@@ -93,6 +96,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -137,15 +141,16 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 1,
         "g": 1,
         "b": 1,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
-      "roughness": 1,
+      "roughness": 1.0,
       "normalMapAmplification": 1,
       "emissiveColor": {
         "r": 0,
@@ -167,6 +172,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -199,13 +205,14 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 1,
         "g": 1,
         "b": 1,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
       "roughness": 0.5,
       "normalMapAmplification": 1,
@@ -229,6 +236,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -261,13 +269,14 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 1,
         "g": 1,
         "b": 1,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
       "roughness": 0.5,
       "normalMapAmplification": 1,
@@ -291,6 +300,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -321,20 +331,21 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
-        "r": 1,
-        "g": 1,
-        "b": 1,
+        "r": 1.0,
+        "g": 1.0,
+        "b": 1.0,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
-      "roughness": 1,
+      "roughness": 1.0,
       "normalMapAmplification": 1,
       "emissiveColor": {
-        "r": 1,
-        "g": 1,
-        "b": 1,
+        "r": 6.667,
+        "g": 6.667,
+        "b": 6.667,
         "a": 1
       },
       "maskedAlphaCutoff": 0.5,
@@ -351,6 +362,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -365,7 +377,7 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [
-        "emission strength 6.667 folded into emissiveColor (clamped)"
+        "emission strength 6.667 folded into emissiveColor (HDR, unclamped)"
       ]
     }
   },
@@ -378,20 +390,21 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 0.2,
         "g": 0.4,
         "b": 0.6,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
       "roughness": 0.5,
       "normalMapAmplification": 1,
       "emissiveColor": {
         "r": 0.5,
         "g": 0.25,
-        "b": 0,
+        "b": 0.0,
         "a": 1
       },
       "maskedAlphaCutoff": 0.5,
@@ -408,6 +421,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -422,7 +436,7 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [
-        "emission strength 0.5 folded into emissiveColor (clamped)"
+        "emission strength 0.5 folded into emissiveColor"
       ]
     }
   },
@@ -435,13 +449,14 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 1,
         "g": 1,
         "b": 1,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
       "roughness": 0.5,
       "normalMapAmplification": 1,
@@ -465,6 +480,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -501,13 +517,14 @@
       "metallicTexturePath": "",
       "roughnessTexturePath": "",
       "emissiveTexturePath": "",
+      "heightTexturePath": "",
       "color": {
         "r": 1,
         "g": 1,
         "b": 1,
         "a": 1
       },
-      "metallic": 0,
+      "metallic": 0.0,
       "specular": 0.5,
       "roughness": 0.5,
       "normalMapAmplification": 0.75,
@@ -531,6 +548,7 @@
       "bIsTriplanar": false,
       "bIsTwoSided": false,
       "bFlipGreenChannel": true,
+      "textureRandomness": 0,
       "surfaceType": "SurfaceType_Default",
       "textureMovement": {
         "x": 0,
@@ -560,5 +578,336 @@
       "notes": []
     }
   },
-  null
+  null,
+  {
+    "entry": {
+      "name": "HeightMapped",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 0.8,
+        "g": 0.8,
+        "b": 0.8,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.6,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/BrickColor.png",
+        "basename": "BrickColor.png"
+      },
+      {
+        "channel": "height",
+        "field": "heightTexturePath",
+        "srcPath": "C:/tex/BrickHeight.png",
+        "basename": "BrickHeight.png"
+      }
+    ],
+    "report": {
+      "name": "HeightMapped",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "GlassTransmission",
+      "type": "Transparent",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 0.9,
+        "g": 0.95,
+        "b": 1.0,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.05,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1.45
+    },
+    "textures": [],
+    "report": {
+      "name": "GlassTransmission",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "AlphaScalarGlass",
+      "type": "Transparent",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1.0,
+        "g": 1.0,
+        "b": 1.0,
+        "a": 0.4
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.2,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1.33
+    },
+    "textures": [],
+    "report": {
+      "name": "AlphaScalarGlass",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "FullParams",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 0.3,
+        "g": 0.3,
+        "b": 0.35,
+        "a": 1
+      },
+      "metallic": 0.8,
+      "specular": 0.2,
+      "roughness": 0.25,
+      "normalMapAmplification": 2.0,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.33,
+      "textureTiling": {
+        "x": 3,
+        "y": 3,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0.5,
+        "y": 0.25,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": true,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/MetalColor.png",
+        "basename": "MetalColor.png"
+      },
+      {
+        "channel": "normal",
+        "field": "normalTexturePath",
+        "srcPath": "C:/tex/MetalNormal.png",
+        "basename": "MetalNormal.png"
+      },
+      {
+        "channel": "roughness",
+        "field": "roughnessTexturePath",
+        "srcPath": "C:/tex/MetalRough.png",
+        "basename": "MetalRough.png"
+      },
+      {
+        "channel": "metallic",
+        "field": "metallicTexturePath",
+        "srcPath": "C:/tex/MetalMetal.png",
+        "basename": "MetalMetal.png"
+      },
+      {
+        "channel": "height",
+        "field": "heightTexturePath",
+        "srcPath": "C:/tex/MetalHeight.png",
+        "basename": "MetalHeight.png"
+      }
+    ],
+    "report": {
+      "name": "FullParams",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "HdrEmissiveTinted",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 0.0,
+        "g": 0.0,
+        "b": 0.0,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 4.0,
+        "g": 2.0,
+        "b": 0.4,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "HdrEmissiveTinted",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "emission strength 4.0 folded into emissiveColor (HDR, unclamped)"
+      ]
+    }
+  }
 ]

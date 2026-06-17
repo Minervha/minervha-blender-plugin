@@ -117,5 +117,79 @@
     "name": "LegacyFlat",
     "skipped": true,
     "textures": []
+  },
+  {
+    "name": "HeightMapped",
+    "skipped": false,
+    "baseColor": { "r": 0.8, "g": 0.8, "b": 0.8, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.6,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "BrickColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/BrickColor.png", "basename": "BrickColor.png", "mapping": null },
+      { "name": "BrickHeight", "slots": ["Height"], "fileKind": "path", "path": "C:/tex/BrickHeight.png", "basename": "BrickHeight.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "GlassTransmission",
+    "skipped": false,
+    "baseColor": { "r": 0.9, "g": 0.95, "b": 1, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.05,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "specular": 0.5,
+    "ior": 1.45,
+    "transmission": 0.9,
+    "alpha": 1,
+    "textures": []
+  },
+  {
+    "name": "AlphaScalarGlass",
+    "skipped": false,
+    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 0.4 },
+    "metallic": 0,
+    "roughness": 0.2,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "ior": 1.33,
+    "transmission": 0,
+    "alpha": 0.4,
+    "textures": []
+  },
+  {
+    "name": "FullParams",
+    "skipped": false,
+    "baseColor": { "r": 0.3, "g": 0.3, "b": 0.35, "a": 1 },
+    "metallic": 0.8,
+    "roughness": 0.25,
+    "emissionStrength": 0,
+    "normalStrength": 2.0,
+    "specular": 0.2,
+    "ior": 1.45,
+    "transmission": 0,
+    "alpha": 1,
+    "twoSided": true,
+    "alphaCutoff": 0.33,
+    "textures": [
+      { "name": "MetalColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/MetalColor.png", "basename": "MetalColor.png",
+        "mapping": { "loc": { "x": 0.5, "y": 0.25, "z": 0 }, "scale": { "x": 3, "y": 3, "z": 1 } } },
+      { "name": "MetalNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/MetalNormal.png", "basename": "MetalNormal.png", "mapping": null },
+      { "name": "MetalRough", "slots": ["Roughness"], "fileKind": "path", "path": "C:/tex/MetalRough.png", "basename": "MetalRough.png", "mapping": null },
+      { "name": "MetalMetal", "slots": ["Metallic"], "fileKind": "path", "path": "C:/tex/MetalMetal.png", "basename": "MetalMetal.png", "mapping": null },
+      { "name": "MetalHeight", "slots": ["Height"], "fileKind": "path", "path": "C:/tex/MetalHeight.png", "basename": "MetalHeight.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "HdrEmissiveTinted",
+    "skipped": false,
+    "baseColor": { "r": 0, "g": 0, "b": 0, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionColor": { "r": 1, "g": 0.5, "b": 0.1, "a": 1 },
+    "emissionStrength": 4.0,
+    "normalStrength": 1,
+    "textures": []
   }
 ]

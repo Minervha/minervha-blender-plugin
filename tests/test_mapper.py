@@ -1,12 +1,13 @@
-"""Parity test: mapper.py (Python port) must match the Studio's mapMaterial.js.
+"""Regression test: mapper.py must still match the committed golden snapshot.
 
-Runs the shared fixtures (tests/fixtures/normalized_materials.json) through the
-Python mapper and asserts the resulting `entry` (the customMaterials object that
-lands in the save) and `textures` list are identical to the golden output
-generated from mapMaterial.js (tests/golden/expected.json).
+Runs the fixtures (tests/fixtures/normalized_materials.json) through mapper.py and
+asserts the resulting `entry` (the customMaterials object that lands in the save)
+and `textures` list are identical to tests/golden/expected.json. The golden is a
+snapshot of mapper.py itself (regenerate with tests/_gen_golden.py) — the Studio's
+mapMaterial.js it once mirrored has been removed, so this guards against accidental
+drift in the mapping, not cross-language parity.
 
-Floats are compared with a small tolerance so JS/Python repr differences don't
-cause false failures. Run:  python tests/test_mapper.py   (exit 0 = parity OK)
+Floats are compared with a small tolerance. Run:  python tests/test_mapper.py
 """
 
 import json
@@ -58,7 +59,7 @@ def run():
         for i, name, msg in fails:
             print(f"  [{i}] {name}: {msg}")
         sys.exit(1)
-    print(f"PARITY OK — {len(fixtures)} fixtures match the Studio mapMaterial.js golden")
+    print(f"GOLDEN OK — {len(fixtures)} fixtures match the mapper.py snapshot")
 
 
 if __name__ == "__main__":

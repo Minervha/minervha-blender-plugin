@@ -5,6 +5,7 @@ __pycache__/
 *.blend2
 /dist/
 /build/
+/tests/_live_probe_output.json
 
 # Local planning docs — not published
 /docs/

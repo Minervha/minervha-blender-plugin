@@ -56,6 +56,8 @@ def normalize_material(mat):
             "name": mat.name, "skipped": True, "objects": [],
             "baseColor": None, "metallic": None, "roughness": None,
             "emissionColor": None, "emissionStrength": None, "normalStrength": None,
+            "specular": None, "ior": None, "transmission": None, "alpha": None,
+            "twoSided": None, "alphaCutoff": None,
             "principledNodeCount": 0, "textures": [],
         }
 
@@ -64,6 +66,7 @@ def normalize_material(mat):
     bsdf_trace.scan_tree(mat.node_tree, textures, principled, normal_maps)
 
     base_color = metallic = roughness = emission_color = emission_strength = None
+    specular = ior = transmission = alpha = None
     principled_with_unlinked = 0
     for p_node, _ in principled:
         bc = p_node.inputs.get('Base Color')
@@ -71,6 +74,10 @@ def normalize_material(mat):
         rough = p_node.inputs.get('Roughness')
         em = p_node.inputs.get('Emission Color') or p_node.inputs.get('Emission')
         em_str = p_node.inputs.get('Emission Strength')
+        spec = p_node.inputs.get('Specular IOR Level') or p_node.inputs.get('Specular')
+        ior_in = p_node.inputs.get('IOR')
+        trans = p_node.inputs.get('Transmission Weight') or p_node.inputs.get('Transmission')
+        alpha_in = p_node.inputs.get('Alpha')
         unlinked = False
         if bc is not None and not bc.is_linked:
             unlinked = True
@@ -92,6 +99,15 @@ def normalize_material(mat):
             unlinked = True
             if emission_strength is None:
                 emission_strength = float(em_str.default_value)
+        # Extra Principled inputs for full v18 export (first unlinked value wins).
+        if spec is not None and not spec.is_linked and specular is None:
+            specular = float(spec.default_value)
+        if ior_in is not None and not ior_in.is_linked and ior is None:
+            ior = float(ior_in.default_value)
+        if trans is not None and not trans.is_linked and transmission is None:
+            transmission = float(trans.default_value)
+        if alpha_in is not None and not alpha_in.is_linked and alpha is None:
+            alpha = float(alpha_in.default_value)
         if unlinked:
             principled_with_unlinked += 1
 
@@ -125,12 +141,21 @@ def normalize_material(mat):
             "slots": slots, "mapping": mapping,
         })
 
+    # Material-level (not node) properties. EEVEE-Next renamed/removed some of
+    # these, so read defensively and fall back to None (mapper uses defaults).
+    two_sided = (not mat.use_backface_culling) if hasattr(mat, "use_backface_culling") else None
+    alpha_cutoff = getattr(mat, "alpha_threshold", None)
+    if alpha_cutoff is not None:
+        alpha_cutoff = float(alpha_cutoff)
+
     return {
         "name": mat.name, "skipped": False,
         "objects": bsdf_trace.objects_using_material(mat),
         "baseColor": base_color, "metallic": metallic, "roughness": roughness,
         "emissionColor": emission_color, "emissionStrength": emission_strength,
         "normalStrength": normal_strength,
+        "specular": specular, "ior": ior, "transmission": transmission, "alpha": alpha,
+        "twoSided": two_sided, "alphaCutoff": alpha_cutoff,
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,
     }
 

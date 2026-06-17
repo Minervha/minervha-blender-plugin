@@ -61,6 +61,19 @@ def trace_from_texture(texture_node, node_tree, parent_map):
             if target_node.type == 'BSDF_PRINCIPLED':
                 found_slots.add(target_socket.name)
                 continue
+            # Height/displacement: a texture feeding a Bump/Displacement "Height"
+            # input, or the Material Output "Displacement" socket, is a height map.
+            # Stop here so it is NOT mis-traced through the Bump node to Principled
+            # 'Normal' (a bump's output feeds the Normal slot).
+            if target_node.type == 'BUMP' and target_socket.name == 'Height':
+                found_slots.add('Height')
+                continue
+            if target_node.type == 'DISPLACEMENT' and target_socket.name == 'Height':
+                found_slots.add('Height')
+                continue
+            if target_node.type == 'OUTPUT_MATERIAL' and target_socket.name == 'Displacement':
+                found_slots.add('Height')
+                continue
             if target_node.type == 'GROUP':
                 group_tree = target_node.node_tree
                 if group_tree:

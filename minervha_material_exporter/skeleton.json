@@ -1,8 +1,8 @@
 {
-  "version": 14,
-  "luaVersion": 11,
+  "version": 18,
+  "luaVersion": 15,
   "level": "",
-  "initialSaveVersion": 14,
+  "initialSaveVersion": 13,
   "lastUpgradeVersion": 14,
   "maxCustomEventsPerTick": 1000,
   "sexScenes": [],
