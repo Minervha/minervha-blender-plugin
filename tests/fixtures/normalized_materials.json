@@ -1,0 +1,121 @@
+[
+  {
+    "name": "SolidColor",
+    "skipped": false,
+    "baseColor": { "r": 0.46, "g": 0.42, "b": 0.22, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.1,
+    "emissionColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": []
+  },
+  {
+    "name": "FuzzyFabric",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": null,
+    "emissionColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "FuzzyNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/FuzzyNormal.png", "basename": "FuzzyNormal.png",
+        "mapping": { "loc": { "x": 0, "y": -1, "z": 0 }, "scale": { "x": 0.02, "y": 0.02, "z": 1 } } },
+      { "name": "FuzzyBaseColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/FuzzyBaseColor.png", "basename": "FuzzyBaseColor.png",
+        "mapping": { "loc": { "x": 0, "y": -1, "z": 0 }, "scale": { "x": 0.02, "y": 0.02, "z": 1 } } },
+      { "name": "FuzzyRoughness", "slots": ["Roughness"], "fileKind": "path", "path": "C:/tex/FuzzyRoughness.png", "basename": "FuzzyRoughness.png",
+        "mapping": { "loc": { "x": 0, "y": -1, "z": 0 }, "scale": { "x": 0.02, "y": 0.02, "z": 1 } } }
+    ]
+  },
+  {
+    "name": "NoneMapping",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 1,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "MangaBaseColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/MangaBaseColor.png", "basename": "MangaBaseColor.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "StickerAlpha",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "StickerSheet", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/StickerSheet.png", "basename": "StickerSheet.png", "mapping": null },
+      { "name": "StickerSheetAlpha", "slots": ["Alpha"], "fileKind": "path", "path": "C:/tex/StickerSheetAlpha.png", "basename": "StickerSheetAlpha.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "UnknownSlot",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "SomeMask", "slots": ["UNKNOWN (or not Principled)"], "fileKind": "path", "path": "C:/tex/SomeMask.png", "basename": "SomeMask.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "LedNoEmColor",
+    "skipped": false,
+    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "metallic": 0,
+    "roughness": 1,
+    "emissionColor": null,
+    "emissionStrength": 6.667,
+    "normalStrength": 1,
+    "textures": []
+  },
+  {
+    "name": "EmissiveTinted",
+    "skipped": false,
+    "baseColor": { "r": 0.2, "g": 0.4, "b": 0.6, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionColor": { "r": 1, "g": 0.5, "b": 0, "a": 1 },
+    "emissionStrength": 0.5,
+    "normalStrength": 1,
+    "textures": []
+  },
+  {
+    "name": "PackedMultiSlot",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "ComboMap", "slots": ["Base Color", "Roughness"], "fileKind": "packed", "path": null, "basename": null,
+        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } } }
+    ]
+  },
+  {
+    "name": "RealMultiSlot",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 0.75,
+    "textures": [
+      { "name": "ComboReal", "slots": ["Base Color", "Roughness"], "fileKind": "path", "path": "C:/tex/ComboReal.png", "basename": "ComboReal.png",
+        "mapping": { "loc": { "x": 0.1, "y": 0.2, "z": 0 }, "scale": { "x": 2, "y": 2, "z": 1 } } }
+    ]
+  },
+  {
+    "name": "LegacyFlat",
+    "skipped": true,
+    "textures": []
+  }
+]

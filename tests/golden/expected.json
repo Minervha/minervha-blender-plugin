@@ -1,0 +1,564 @@
+[
+  {
+    "entry": {
+      "name": "SolidColor",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 0.46,
+        "g": 0.42,
+        "b": 0.22,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 0.1,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "SolidColor",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "FuzzyFabric",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 0.02,
+        "y": 0.02,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": -1,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "normal",
+        "field": "normalTexturePath",
+        "srcPath": "C:/tex/FuzzyNormal.png",
+        "basename": "FuzzyNormal.png"
+      },
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/FuzzyBaseColor.png",
+        "basename": "FuzzyBaseColor.png"
+      },
+      {
+        "channel": "roughness",
+        "field": "roughnessTexturePath",
+        "srcPath": "C:/tex/FuzzyRoughness.png",
+        "basename": "FuzzyRoughness.png"
+      }
+    ],
+    "report": {
+      "name": "FuzzyFabric",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "NoneMapping",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 1,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/MangaBaseColor.png",
+        "basename": "MangaBaseColor.png"
+      }
+    ],
+    "report": {
+      "name": "NoneMapping",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "StickerAlpha",
+      "type": "Masked",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/StickerSheet.png",
+        "basename": "StickerSheet.png"
+      }
+    ],
+    "report": {
+      "name": "StickerAlpha",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "UnknownSlot",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "UnknownSlot",
+      "ignoredSlots": [
+        {
+          "slot": "UNKNOWN (or not Principled)",
+          "texture": "SomeMask"
+        }
+      ],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "LedNoEmColor",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 1,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "LedNoEmColor",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "emission strength 6.667 folded into emissiveColor (clamped)"
+      ]
+    }
+  },
+  {
+    "entry": {
+      "name": "EmissiveTinted",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 0.2,
+        "g": 0.4,
+        "b": 0.6,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0.5,
+        "g": 0.25,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "EmissiveTinted",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "emission strength 0.5 folded into emissiveColor (clamped)"
+      ]
+    }
+  },
+  {
+    "entry": {
+      "name": "PackedMultiSlot",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "PackedMultiSlot",
+      "ignoredSlots": [],
+      "unresolvedTextures": [
+        {
+          "channel": "diffuse",
+          "texture": "ComboMap",
+          "fileKind": "packed"
+        },
+        {
+          "channel": "roughness",
+          "texture": "ComboMap",
+          "fileKind": "packed"
+        }
+      ],
+      "notes": []
+    }
+  },
+  {
+    "entry": {
+      "name": "RealMultiSlot",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 0.75,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 2,
+        "y": 2,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0.1,
+        "y": 0.2,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/ComboReal.png",
+        "basename": "ComboReal.png"
+      },
+      {
+        "channel": "roughness",
+        "field": "roughnessTexturePath",
+        "srcPath": "C:/tex/ComboReal.png",
+        "basename": "ComboReal.png"
+      }
+    ],
+    "report": {
+      "name": "RealMultiSlot",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": []
+    }
+  },
+  null
+]
