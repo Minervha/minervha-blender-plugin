@@ -12,20 +12,6 @@ import math
 import bpy
 
 
-def find_group_input(node_tree):
-    for node in node_tree.nodes:
-        if node.type == 'GROUP_INPUT':
-            return node
-    return None
-
-
-def find_group_output(node_tree):
-    for node in node_tree.nodes:
-        if node.type == 'GROUP_OUTPUT':
-            return node
-    return None
-
-
 def build_local_parent_map(root_tree):
     """Map each nested node-group tree -> list of (group_node, containing_tree)."""
     parent_map = {}
@@ -79,9 +65,13 @@ def trace_from_texture(texture_node, node_tree, parent_map):
                 if group_tree:
                     idx = next((i for i, inp in enumerate(target_node.inputs) if inp == target_socket), None)
                     if idx is not None:
-                        gi = find_group_input(group_tree)
-                        if gi and idx < len(gi.outputs):
-                            stack.append((gi.outputs[idx], group_tree))
+                        # A tree can hold SEVERAL Group Input nodes (Blender spawns a fresh one each
+                        # time you drag from a group socket); the link feeding the BSDF may live on any
+                        # of them. Descend through every one — picking only the first would dead-end
+                        # the trace and silently lose the texture's slot. The visited-set dedups.
+                        for gi in group_tree.nodes:
+                            if gi.type == 'GROUP_INPUT' and idx < len(gi.outputs):
+                                stack.append((gi.outputs[idx], group_tree))
                 continue
             if target_node.type == 'GROUP_OUTPUT':
                 idx = next((i for i, inp in enumerate(target_node.inputs) if inp == target_socket), None)
@@ -127,9 +117,13 @@ def find_mapping_for_texture(tex_node, node_tree, parent_map):
             if source_node.type == 'GROUP' and source_node.node_tree:
                 idx = next((i for i, out in enumerate(source_node.outputs) if out == source_socket), None)
                 if idx is not None:
-                    go = find_group_output(source_node.node_tree)
-                    if go and idx < len(go.inputs) and go.inputs[idx].is_linked:
-                        stack.append((go.inputs[idx], source_node.node_tree))
+                    # A tree can hold several Group Output nodes; the matching interface socket may be
+                    # linked on any of them. Follow the first linked one — assuming the first node would
+                    # miss a Mapping wired through a later Group Output and silently drop its tiling/offset.
+                    for go in source_node.node_tree.nodes:
+                        if go.type == 'GROUP_OUTPUT' and idx < len(go.inputs) and go.inputs[idx].is_linked:
+                            stack.append((go.inputs[idx], source_node.node_tree))
+                            break
                 continue
     return None
 

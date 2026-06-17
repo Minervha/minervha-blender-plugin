@@ -84,6 +84,17 @@ def _png_name(stem, used):
     return f"{base[:-4]}_{i}.png"
 
 
+def _unique_basename(base, taken):
+    """A bundle-unique texture basename: suffix `_2`, `_3`... before the extension."""
+    if base not in taken:
+        return base
+    stem, ext = os.path.splitext(base)
+    i = 2
+    while f"{stem}_{i}{ext}" in taken:
+        i += 1
+    return f"{stem}_{i}{ext}"
+
+
 def _reexport_image_to_png(image_name, dest_path):
     """Re-export a bpy image (packed/generated/other format) to a PNG. True on success."""
     if bpy is None:
@@ -109,8 +120,9 @@ def _reexport_image_to_png(image_name, dest_path):
 def _resolve_packed_textures(norms, tmpdir):
     """Pre-pass: re-export packed/generated/non-png-jpg textures to PNG; mutate the
     texture dicts in place to look like on-disk path textures. Returns the set of
-    re-exported textures' sanitized basenames (matches the basenames used in the
-    ZIP/report, so the copied-vs-re-exported classification holds)."""
+    re-exported textures' source paths (the tmpdir PNGs) — keyed on srcPath, not
+    basename, so the copied-vs-re-exported classification survives a later collision
+    rename of the bundled basename."""
     cache = {}      # image_name -> (png_path, basename) or None (failed)
     used = set()    # basenames already emitted into tmpdir
     reexported = set()
@@ -137,7 +149,7 @@ def _resolve_packed_textures(norms, tmpdir):
             res = cache.get(img_name)
             if res:
                 t["fileKind"], t["path"], t["basename"] = "path", res[0], res[1]
-                reexported.add(_sanitize_basename(res[1]))
+                reexported.add(res[0])      # srcPath of the re-exported PNG
             # else: leave as-is -> mapper drops it -> reported as missing
     return reexported
 
@@ -184,8 +196,14 @@ def _build_material_entries(norms, name, report, tmpdir):
     """
     reexported = _resolve_packed_textures(norms, tmpdir)
 
-    # Pass 1: map, sanitize + dedup + namespace names, gather unique textures by basename.
+    # Pass 1: map, sanitize + dedup + namespace names, gather unique textures by SOURCE path.
+    # Textures are deduped by srcPath, NOT by basename: two distinct files that share a basename
+    # (same name in different folders, or names that sanitise/NFKD-collapse to the same ASCII string)
+    # must each get a distinct bundled basename — keying on basename alone made the second file
+    # silently overwrite the first in the ZIP, so both materials pointed at one texture. The same file
+    # reused across channels/materials still dedups to a single bundled copy.
     taken, mapped, unique_tex, material_names = set(), [], {}, {}
+    by_src, taken_bases = {}, set()
     for norm in norms:
         m = mapper.map_material(norm)
         if not m:
@@ -204,20 +222,29 @@ def _build_material_entries(norms, name, report, tmpdir):
             raw = t.get("basename")
             if not raw:
                 continue
+            src = t.get("srcPath")
+            if src is not None and src in by_src:
+                t["basename"] = by_src[src]             # same file reused -> one bundled copy
+                continue
             b = _sanitize_basename(raw)
+            if b in taken_bases:                        # basename clash with a DIFFERENT source
+                b = _unique_basename(b, taken_bases)
+                report["texturesRenamed"].append({"from": raw, "to": b})
+            elif b != raw:
+                report["texturesRenamed"].append({"from": raw, "to": b})
+            taken_bases.add(b)
             t["basename"] = b
-            if b not in unique_tex:
-                unique_tex[b] = t.get("srcPath")
-                if b != raw:
-                    report["texturesRenamed"].append({"from": raw, "to": b})
+            unique_tex[b] = src
+            if src is not None:
+                by_src[src] = b
 
-    # Read texture bytes (dedup by basename); classify copied vs re-exported.
+    # Read texture bytes (one per bundled basename); classify copied vs re-exported by srcPath.
     tex_bytes = {}
     for b, src in unique_tex.items():
         if src and os.path.isfile(src):
             with open(src, "rb") as fh:
                 tex_bytes[b] = fh.read()
-            (report["texturesReExported"] if b in reexported else report["texturesCopied"]).append(b)
+            (report["texturesReExported"] if src in reexported else report["texturesCopied"]).append(b)
         else:
             report["texturesMissing"].append({"basename": b, "src": src})
 
