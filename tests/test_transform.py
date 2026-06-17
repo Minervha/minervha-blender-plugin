@@ -1,8 +1,9 @@
 """Unit tests for prop_mapper.blender_to_wl_transform.
 
-Pins the Blender -> Wild Life transform convention. The exact axis mapping / sign
-/ position scale is calibration item #2 (resolved in-game, chunk-06): these tests
-encode the CURRENT starting hypothesis, so a calibration change shows up as a
+Pins the Blender -> Wild Life transform convention (calibration item #2, chunk-06).
+RESOLVED in-game: position is scaled by `position_scale` (= 100 x Unit Scale, metres
+-> WL cm) and position.z is NEGATED (WL vertical placement mirrors Blender's). STILL
+open: the rotation axis/sign permutation. A calibration change shows up as a
 deliberate, reviewed diff here (and in the golden) rather than a silent shift.
 
 Pure Python (no bpy). Run:  python tests/test_transform.py  (or pytest)
@@ -40,8 +41,22 @@ def test_key_order():
 
 
 def test_translation():
+    # x,y pass through; z is negated (WL placement mirrors Blender's vertical axis).
     t = prop_mapper.blender_to_wl_transform((1.5, -2.0, 3.0), (0, 0, 0), "XYZ", (1, 1, 1))
-    assert t["position"] == {"x": 1.5, "y": -2.0, "z": 3.0}
+    assert t["position"] == {"x": 1.5, "y": -2.0, "z": -3.0}
+
+
+def test_z_axis_negated():
+    up = prop_mapper.blender_to_wl_transform((0, 0, 5.0), (0, 0, 0), "XYZ", (1, 1, 1))
+    assert up["position"]["z"] == -5.0
+    down = prop_mapper.blender_to_wl_transform((0, 0, -5.0), (0, 0, 0), "XYZ", (1, 1, 1))
+    assert down["position"]["z"] == 5.0
+
+
+def test_zero_z_is_not_negative_zero():
+    # A z=0 prop must serialise as "0.0", never "-0.0".
+    t = prop_mapper.blender_to_wl_transform((0.0, 0.0, 0.0), (0, 0, 0), "XYZ", (1, 1, 1))
+    assert repr(t["position"]["z"]) == "0.0"
 
 
 def test_rotation_radians_to_degrees():
@@ -57,16 +72,19 @@ def test_scale_passthrough_incl_negative():
 
 
 def test_position_scale_factor():
-    # world scale = 1 / Unit Scale; Unit Scale 0.01 -> factor 100, applied to position only.
+    # world scale = 100 x Unit Scale (metres -> WL cm); default Unit Scale 1.0 -> factor 100,
+    # applied to position only. z is also negated.
     t = prop_mapper.blender_to_wl_transform((1.0, -2.0, 3.0), (0, 0, 0), "XYZ", (1, 1, 1), position_scale=100.0)
-    assert t["position"] == {"x": 100.0, "y": -200.0, "z": 300.0}
+    assert t["position"] == {"x": 100.0, "y": -200.0, "z": -300.0}
     assert t["scale"] == {"x": 1, "y": 1, "z": 1}  # prop scale is unitless, untouched by world scale
 
 
 def run():
     tests = [
         test_identity, test_key_order, test_translation,
+        test_z_axis_negated, test_zero_z_is_not_negative_zero,
         test_rotation_radians_to_degrees, test_scale_passthrough_incl_negative,
+        test_position_scale_factor,
     ]
     fails = []
     for t in tests:

@@ -16,6 +16,12 @@ except ImportError:                           # dev / sys.path import (live MCP)
     import introspect, wlsave_export, scene_introspect, obj_export
 
 
+# Blender works in metres; Wild Life (Unreal) world unit is the centimetre, so a Blender scene
+# must be multiplied by 100 to import at the right size (calibration #2). One world scale drives
+# BOTH the OBJ geometry (global_scale) and the prop positions (position_scale).
+WL_UNITS_PER_METRE = 100.0
+
+
 SCOPE_ITEMS = [
     ('SELECTED', "Selected Objects", "Materials used by the selected objects"),
     ('COLLECTION', "Blender Collection", "Materials used by objects in a chosen collection"),
@@ -115,10 +121,11 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         # 'COLLECTION' -> level "" (portable); a fixed map name -> that exact level string.
         target = context.scene.minervha_export_target
         level = "" if target == 'COLLECTION' else target
-        # World scale = 1 / scene Unit Scale (e.g. Unit Scale 0.01 -> x100), applied UNIFORMLY to
-        # geometry (obj global_scale) and prop positions — one scene-wide scale, not per-object.
+        # World scale = 100 x scene Unit Scale (Blender metres -> WL centimetres), applied UNIFORMLY
+        # to geometry (obj global_scale) and prop positions — one scene-wide scale, not per-object.
+        # At the default Unit Scale (1.0) this is x100; a cm-modelled scene (Unit Scale 0.01) -> x1.
         unit = context.scene.unit_settings.scale_length or 1.0
-        world_scale = 1.0 / unit
+        world_scale = WL_UNITS_PER_METRE * unit
         exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(objs),
                                                 global_scale=world_scale)
         report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,

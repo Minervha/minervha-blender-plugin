@@ -32,10 +32,10 @@ except ImportError:
 # the operator's default (NEGATIVE_Z/Y) was remapping to Y-up and laying meshes down.
 FORWARD_AXIS = "Y"
 UP_AXIS = "Z"
-# Scale is NOT hardcoded here: it is driven by the scene's Unit Scale (one "world" scale), passed in as
-# `global_scale` by the caller and applied UNIFORMLY to geometry here AND to prop positions in prop_mapper
-# (never per-object). wm.obj_export does not honour scene unit scale itself (no use_scene_unit option), so
-# the caller passes the factor explicitly.
+# Scale is NOT hardcoded here: the caller passes one "world" scale as `global_scale` (= 100 x scene Unit
+# Scale, the Blender-metres -> WL-centimetres factor) and it is applied UNIFORMLY to geometry here AND to
+# prop positions in prop_mapper (never per-object). wm.obj_export does not honour scene unit scale itself
+# (no use_scene_unit option), so the caller passes the factor explicitly.
 
 
 def export_mesh_obj(src_object, dest_dir, used_basenames, write_mtl=True, global_scale=1.0):

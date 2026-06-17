@@ -23,8 +23,13 @@ import math
 OFFSET = 1
 
 # --- Calibration item #2 (chunk-06): Blender -> WL transform convention.
-#  * Scale: position is multiplied by `position_scale` (the world scale = 1 / scene Unit Scale),
-#    passed in by the caller so geometry (obj_export global_scale) and positions share one factor.
+#  * Scale (RESOLVED in-game): position is multiplied by `position_scale` = world scale =
+#    100 x scene Unit Scale (Blender metres -> Wild Life/Unreal centimetres). The caller passes the
+#    same factor to obj_export's global_scale so geometry and positions share one factor. At the
+#    default Unit Scale (1.0) this is x100 — which is why an unconverted scene imported 100x too small.
+#  * Z (RESOLVED in-game): position.z is NEGATED. WL's vertical placement is the mirror of Blender's,
+#    so a scene imported with its Z layout flipped. This is a PLACEMENT-only flip — the mesh geometry
+#    itself stays upright (obj_export keeps Blender-native up=Z), so only the prop position.z flips.
 #  * Rotation: per-axis euler->degrees (pitch=rotX, yaw=rotY, roll=rotZ). The exact Blender-axis ->
 #    WL pitch/yaw/roll permutation + signs is STILL being calibrated in-game (kept on the prop by
 #    decision); a controlled single-axis test fixes it. Changing it affects test_transform + golden.
@@ -49,15 +54,18 @@ def blender_to_wl_transform(location, rotation_euler, rotation_order, scale, pos
     """Local Blender transform -> WL {position, rotation(deg), scale}.
 
     location=(x,y,z) metres, rotation_euler=(rx,ry,rz) radians, rotation_order e.g. "XYZ",
-    scale=(sx,sy,sz), position_scale = world scale factor (1 / scene Unit Scale). Keys are emitted
-    in the game's order (x,y,z / pitch,yaw,roll) for golden stability. This is the SINGLE locus of
-    the axis/sign convention (calibration #2); `rotation_order` is threaded for the order-aware
-    conversion the calibration will install."""
+    scale=(sx,sy,sz), position_scale = world scale factor (100 x scene Unit Scale, metres -> WL cm).
+    position.z is negated (WL vertical placement is the mirror of Blender's). Keys are emitted in the
+    game's order (x,y,z / pitch,yaw,roll) for golden stability. This is the SINGLE locus of the
+    axis/sign convention (calibration #2); `rotation_order` is threaded for the order-aware conversion
+    the calibration will install."""
     lx, ly, lz = location
     rx, ry, rz = rotation_euler
     sx, sy, sz = scale
+    # `... or 0.0` normalises a negated zero back to +0.0 so a z=0 prop stays "0.0", not "-0.0".
+    pos_z = -lz * position_scale or 0.0
     return {
-        "position": {"x": lx * position_scale, "y": ly * position_scale, "z": lz * position_scale},
+        "position": {"x": lx * position_scale, "y": ly * position_scale, "z": pos_z},
         "rotation": {"pitch": math.degrees(rx), "yaw": math.degrees(ry), "roll": math.degrees(rz)},
         "scale": {"x": sx, "y": sy, "z": sz},
     }
