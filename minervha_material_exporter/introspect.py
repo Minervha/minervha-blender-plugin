@@ -1,9 +1,8 @@
 """introspect.py — build NormalizedMaterial[] from Blender materials (mode B input).
 
 Produces the SAME shape as Minervha Studio's blenderParse.js output, so mapper.py
-(the port of mapMaterial.js) consumes it directly. Uses bsdf_trace.py — the shared
-node-tracing core also used by txt_export.py — so mode A (.txt) and mode B (.wlsave)
-never disagree about what they read.
+(the port of mapMaterial.js) consumes it directly. Uses bsdf_trace.py for the node
+walking.
 
 Values are read at full precision (the .txt path rounds for display; mode B keeps
 the exact float). The parser drops mapping rotation, so the normalized model carries

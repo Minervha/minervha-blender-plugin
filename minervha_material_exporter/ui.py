@@ -1,8 +1,8 @@
-"""ui.py — Minervha N-panel + export operators.
+"""ui.py — Minervha N-panel + export operator.
 
-A "Minervha" sidebar panel in the 3D viewport with a scope dropdown and two export
-operators: Export .txt (mode A, for the Studio injector) and Export .wlsave (mode B,
-a portable collection bundle). Both open a file-save dialog; .wlsave shows a report.
+A "Minervha" sidebar panel in the 3D viewport with a scope dropdown and an Export
+.wlsave operator that builds a portable Wild Life collection bundle (opens a file-save
+dialog, then shows a report).
 """
 
 import bpy
@@ -10,9 +10,9 @@ from bpy.props import EnumProperty, PointerProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper
 
 try:
-    from . import introspect, txt_export, wlsave_export   # packaged extension
-except ImportError:                                        # dev / sys.path import (live MCP)
-    import introspect, txt_export, wlsave_export
+    from . import introspect, wlsave_export   # packaged extension
+except ImportError:                           # dev / sys.path import (live MCP)
+    import introspect, wlsave_export
 
 
 SCOPE_ITEMS = [
@@ -38,27 +38,6 @@ def _materials_for_scope(context):
 
 def _safe_name(name):
     return bool(name) and name not in ('.', '..') and not any(c in name for c in ('/', '\\', '\0', ':'))
-
-
-class MINERVHA_OT_export_txt(bpy.types.Operator, ExportHelper):
-    bl_idname = "minervha.export_txt"
-    bl_label = "Export .txt"
-    bl_description = "Write a texture_usage.txt for Minervha Studio's material injector"
-    filename_ext = ".txt"
-    filter_glob: StringProperty(default="*.txt", options={'HIDDEN'})
-
-    def invoke(self, context, event):
-        self.filepath = "texture_usage.txt"
-        return ExportHelper.invoke(self, context, event)
-
-    def execute(self, context):
-        mats = _materials_for_scope(context)
-        if not mats:
-            self.report({'WARNING'}, "No materials in the selected scope")
-            return {'CANCELLED'}
-        count = txt_export.export_txt(mats, self.filepath)
-        self.report({'INFO'}, "Exported %d materials to %s" % (count, self.filepath))
-        return {'FINISHED'}
 
 
 class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
@@ -132,16 +111,13 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
             pass
 
         layout.separator()
-        layout.operator("minervha.export_txt", icon='TEXT')
-
-        layout.separator()
         box = layout.box()
         box.label(text="Wild Life collection (.wlsave)")
         box.prop(scene, "minervha_wlsave_name", text="Name")
         box.operator("minervha.export_wlsave", icon='PACKAGE')
 
 
-_classes = (MINERVHA_OT_export_txt, MINERVHA_OT_export_wlsave, MINERVHA_PT_exporter)
+_classes = (MINERVHA_OT_export_wlsave, MINERVHA_PT_exporter)
 
 
 def register():

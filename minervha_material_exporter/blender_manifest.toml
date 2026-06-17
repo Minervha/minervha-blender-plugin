@@ -15,7 +15,7 @@ blender_version_min = "4.2.0"
 # bpy add-ons are derivative works of Blender → must be GPL-compatible.
 license = ["SPDX:GPL-3.0-or-later"]
 
-# The add-on reads texture files and writes .txt / .wlsave exports to a
-# user-chosen location (outside the extension directory).
+# The add-on reads texture files and writes a .wlsave export to a user-chosen
+# location (outside the extension directory).
 [permissions]
-files = "Read scene textures and write .txt / .wlsave exports to a location you choose"
+files = "Read scene textures and write a .wlsave collection bundle to a location you choose"

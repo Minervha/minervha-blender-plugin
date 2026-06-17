@@ -1,9 +1,8 @@
 # Minervha Blender Plugin — Material Exporter
 
-Blender extension that exports a Blender scene's materials to **Wild Life**, two ways:
-
-- **`.txt`** — `texture_usage.txt`, read by **Minervha Studio**'s material injector (maps the materials into a save).
-- **`.wlsave`** — a self-contained Wild Life **collection bundle** (JSON + textures), installable directly via the Studio.
+Blender extension that exports a Blender scene's materials to **Wild Life** as a self-contained
+**collection bundle** (`.wlsave`) — the collection's JSON plus all its textures, ready to install via
+**Minervha Studio**.
 
 > 🚧 Early release — functional end-to-end; in-game verification on large scenes still in progress.
 
@@ -13,7 +12,7 @@ Blender extension that exports a Blender scene's materials to **Wild Life**, two
 |---|---|
 | **Blender** | **4.2 or newer** (the Extensions platform). Developed & validated on **5.1**. Uses the Blender 4.0+ Principled BSDF socket names; the shader-node API it relies on is stable across 4.2–5.x. No upper bound. |
 | **OS** | Windows, macOS, Linux — pure Python / `bpy`, no platform-specific code. |
-| **Wild Life / Studio** | `.wlsave` installs through **Minervha Studio** (collection save format, `version 14`+; older versions auto-upgrade in-game). `.txt` is consumed by the Studio's Blender→WL material injector. |
+| **Wild Life / Studio** | The `.wlsave` installs through **Minervha Studio** (collection save format, `version 14`+; older versions auto-upgrade in-game). |
 
 ## Installation
 
@@ -29,10 +28,9 @@ In the **Minervha** panel:
 
 1. **Scope** — what to export: *Selected Objects*, a *Blender Collection*, or the *Whole File*.
    The panel shows how many materials are in scope.
-2. **Export .txt** — writes `texture_usage.txt` for the Studio's injector.
-3. **Wild Life collection (.wlsave)** — set a **Name**, then **Export .wlsave** to build a portable
-   collection bundle (textures included). A report shows what was created / copied / re-exported / missing.
-   Install the `.wlsave` in Minervha Studio.
+2. **Name** — the Wild Life collection name.
+3. **Export .wlsave** — builds a portable collection bundle (textures included). A report shows what was
+   created / copied / re-exported / missing. Install the `.wlsave` in Minervha Studio.
 
 **Textures**: on-disk PNG/JPG are copied as-is; packed/generated images and other formats (`.tga`, `.exr`…)
 are re-exported to PNG automatically.
@@ -43,19 +41,17 @@ are re-exported to PNG automatically.
 minervha_material_exporter/    # extension source (build root)
   blender_manifest.toml         # Blender 4.2+ extension manifest
   __init__.py                   # register -> ui
-  ui.py                         # "Minervha" N-panel + export operators
-  bsdf_trace.py                 # shared node-tracing helpers
-  introspect.py                 # scene -> NormalizedMaterial[]            (mode B)
-  txt_export.py                 # materials -> texture_usage.txt           (mode A)
-  mapper.py                     # NormalizedMaterial -> customMaterials    (port of mapMaterial.js)
+  ui.py                         # "Minervha" N-panel + Export .wlsave operator
+  bsdf_trace.py                 # node-tracing helpers
+  introspect.py                 # scene -> NormalizedMaterial[]
+  mapper.py                     # NormalizedMaterial -> customMaterials  (port of mapMaterial.js)
   wlsave_export.py              # NormalizedMaterial[] -> .wlsave bundle
   skeleton.json                 # collection skeleton for the .wlsave
 tests/                          # Python<->JS parity (mapper golden)
 ```
 
-The two exports share one node-tracing core (`bsdf_trace`), so mode A (the byte-identical `.txt`) and mode B
-(the `.wlsave`) always read the material graph the same way. `mapper.py` is a faithful port of the Studio's
-`mapMaterial.js`, kept honest by a golden parity test.
+`mapper.py` is a faithful port of the Studio's `mapMaterial.js`, kept honest by a golden parity test, so the
+materials written into the `.wlsave` match what the Studio would produce.
 
 ## License
 
