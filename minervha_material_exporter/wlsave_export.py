@@ -261,7 +261,7 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None):
 
 
 def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
-                       position_scale=1.0):
+                       position_scale=1.0, level=""):
     """Build a full-scene `.wlsave`: customMaterials + props (UserMesh/Group) + Models/ OBJs.
 
     `norms`        — NormalizedMaterial[] for the materials used by the in-scope objects.
@@ -272,11 +272,15 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                      tests inject a fake, so this assembly stays Blender-free and unit-testable.
     `position_scale` — world scale factor (1 / scene Unit Scale) applied to prop positions; the
                      same factor must be passed to obj_exporter as its geometry global_scale.
+    `level`        — the save's `level` field. `""` (default) = a portable collection; a fixed map
+                     name ("Showroom"/"NewWildLifeMap"/"OldWildLifeMap") = a map save the Studio
+                     installs under MySaves/<level>/. Only the JSON field changes — the ZIP layout
+                     is identical either way.
 
     One OBJ per unique mesh datablock (instances reuse the same MeshPath). Material names are
     namespaced; each prop's CustomMaterial{i} references them by that exact name. Returns the
     materials report extended with: objectsExported[], objectsSkipped[], noUv[],
-    proceduralMaterials[], meshesWritten[], materialNamespaced.
+    proceduralMaterials[], meshesWritten[], materialNamespaced, level.
     """
     name_original = name
     name = _sanitize_name(name, "Collection")
@@ -284,7 +288,7 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
     report = _new_report(name, name_original, dest_path)
     report.update({"objectsExported": [], "objectsSkipped": [], "noUv": [],
                    "proceduralMaterials": [], "meshesWritten": [], "meshExportFailed": [],
-                   "materialNamespaced": True})
+                   "materialNamespaced": True, "level": level})
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_scene_")
     try:
@@ -334,7 +338,7 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                     if pm not in report["proceduralMaterials"]:
                         report["proceduralMaterials"].append(pm)
 
-        skel["level"] = ""
+        skel["level"] = level
         skel["customMaterials"] = entries
         skel["props"] = props
         skel["bHasDedicatedIcon"] = False

@@ -46,14 +46,14 @@ def _fake_obj_exporter(mesh_key, dest_dir, used_basenames):
     return basename
 
 
-def _build():
+def _build(level=""):
     objs = _fixtures()
     norms = _material_norms(objs)
     tmp = tempfile.mkdtemp(prefix="scene_test_")
     dest = os.path.join(tmp, "out.wlsave")
     report = wlsave_export.build_scene_wlsave(
         norms, objs, NAME, dest, _fake_obj_exporter,
-        skeleton_path=os.path.join(PKG, "skeleton.json"))
+        skeleton_path=os.path.join(PKG, "skeleton.json"), level=level)
     with zipfile.ZipFile(dest) as z:
         names = z.namelist()
         data = json.loads(z.read(f"{NAME}/{NAME}.json"))
@@ -109,6 +109,23 @@ def test_report_counters():
     assert report["noUv"] == ["GlassLamp"]
     assert "GlassMat" in report["proceduralMaterials"]
     assert report["materialNamespaced"] is True
+
+
+def test_level_default_is_collection():
+    # No level given -> a portable collection (level "").
+    objs, report, names, data = _build()
+    assert data["level"] == ""
+    assert report["level"] == ""
+
+
+def test_level_map_target():
+    # A fixed map name flows verbatim into the save's `level` field (and the report).
+    objs, report, names, data = _build(level="Showroom")
+    assert data["level"] == "Showroom"
+    assert report["level"] == "Showroom"
+    # Only the level field changes — the ZIP layout (Models/, props, customMaterials) is unchanged.
+    assert f"{NAME}/{NAME}.json" in names
+    assert len(data["props"]) == len(objs)
 
 
 def test_materials_only_path_still_namespaces():

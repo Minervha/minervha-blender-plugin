@@ -29,6 +29,17 @@ MODE_ITEMS = [
 ]
 
 
+# Where a Scene export lands. 'COLLECTION' -> level "" (portable, imports into any map); a fixed map
+# name -> level "<map>" (a map save the Studio installs under MySaves/<map>/). The non-COLLECTION
+# identifiers ARE the verbatim `level` strings, so the operator maps them straight through.
+TARGET_ITEMS = [
+    ('COLLECTION', "Collection", "Portable collection — imports into any map (level empty)"),
+    ('Showroom', "Showroom (map)", "Full save placed on the Showroom map"),
+    ('NewWildLifeMap', "New Wild Life Map", "Full save placed on the New Wild Life map"),
+    ('OldWildLifeMap', "Old Wild Life Map", "Full save placed on the Old Wild Life map"),
+]
+
+
 def _objects_for_scope(context):
     scope = context.scene.minervha_scope
     if scope == 'SELECTED':
@@ -101,6 +112,9 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         if not norm_objects:
             self.report({'WARNING'}, "No exportable objects (meshes/empties) in scope")
             return {'CANCELLED'}
+        # 'COLLECTION' -> level "" (portable); a fixed map name -> that exact level string.
+        target = context.scene.minervha_export_target
+        level = "" if target == 'COLLECTION' else target
         # World scale = 1 / scene Unit Scale (e.g. Unit Scale 0.01 -> x100), applied UNIFORMLY to
         # geometry (obj global_scale) and prop positions — one scene-wide scale, not per-object.
         unit = context.scene.unit_settings.scale_length or 1.0
@@ -108,9 +122,10 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(objs),
                                                 global_scale=world_scale)
         report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
-                                                  position_scale=world_scale)
-        self.report({'INFO'}, "Built %s — %d objects, %d meshes, %d materials (%d no-UV)" % (
-            self.filepath, len(report['objectsExported']), len(report['meshesWritten']),
+                                                  position_scale=world_scale, level=level)
+        self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV)" % (
+            self.filepath, ("map '%s'" % level) if level else "collection",
+            len(report['objectsExported']), len(report['meshesWritten']),
             len(report['created']), len(report['noUv'])))
         self._popup(context, report)
         return {'FINISHED'}
@@ -125,7 +140,8 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
 def _popup_report(context, report):
     def draw(self, _ctx):
         layout = self.layout
-        layout.label(text="Collection: " + report['name'])
+        lvl = report.get('level') or ''
+        layout.label(text=("Map %s: " % lvl if lvl else "Collection: ") + report['name'])
         if report.get('nameOriginal') and report['nameOriginal'] != report['name']:
             layout.label(text="Name adjusted: %s -> %s" % (report['nameOriginal'], report['name']))
         layout.label(text="Materials created: %d" % len(report['created']))
@@ -172,6 +188,8 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
             col.prop(scene, "minervha_collection", text="")
 
         scene_mode = scene.minervha_export_mode == 'SCENE'
+        if scene_mode:
+            col.prop(scene, "minervha_export_target", text="Target")
         try:
             if scene_mode:
                 col.label(text="%d object(s) in scope" % len(_scene_objects(context)))
@@ -199,6 +217,7 @@ _classes = (MINERVHA_OT_export_wlsave, MINERVHA_PT_exporter)
 
 def register():
     bpy.types.Scene.minervha_export_mode = EnumProperty(name="Mode", items=MODE_ITEMS, default='MATERIALS')
+    bpy.types.Scene.minervha_export_target = EnumProperty(name="Target", items=TARGET_ITEMS, default='COLLECTION')
     bpy.types.Scene.minervha_scope = EnumProperty(name="Scope", items=SCOPE_ITEMS, default='SELECTED')
     bpy.types.Scene.minervha_collection = PointerProperty(name="Collection", type=bpy.types.Collection)
     bpy.types.Scene.minervha_wlsave_name = StringProperty(name="Name", default="MyMaterials")
@@ -209,6 +228,7 @@ def register():
 def unregister():
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
-    for prop in ("minervha_export_mode", "minervha_scope", "minervha_collection", "minervha_wlsave_name"):
+    for prop in ("minervha_export_mode", "minervha_export_target", "minervha_scope",
+                 "minervha_collection", "minervha_wlsave_name"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

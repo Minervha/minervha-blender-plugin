@@ -32,6 +32,12 @@ In the **Minervha** panel:
 3. **Export .wlsave** — builds a portable collection bundle (textures included). A report shows what was
    created / copied / re-exported / missing. Install the `.wlsave` in Minervha Studio.
 
+**Scene mode** (the *Mode* toggle) also exports each object's geometry, transforms and hierarchy, not just
+its materials. A **Target** dropdown then chooses what the `.wlsave` becomes: a portable **Collection**
+(imports into any map) or a **map save** placed on a fixed Wild Life map — *Showroom*, *New Wild Life Map*
+or *Old Wild Life Map*. The Studio installs a collection under `Collections/` and a map save under
+`MySaves/<map>/`.
+
 **Textures**: on-disk PNG/JPG are copied as-is; packed/generated images and other formats (`.tga`, `.exr`…)
 are re-exported to PNG automatically.
 
