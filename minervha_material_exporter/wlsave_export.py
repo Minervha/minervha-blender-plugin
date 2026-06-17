@@ -24,9 +24,10 @@ import unicodedata
 import zipfile
 
 try:
-    from . import mapper          # packaged extension
-except ImportError:               # dev / sys.path import (tests, live MCP)
+    from . import mapper, prop_mapper   # packaged extension
+except ImportError:                      # dev / sys.path import (tests, live MCP)
     import mapper
+    import prop_mapper
 
 try:
     import bpy                    # only used to re-export packed/generated textures
@@ -141,7 +142,7 @@ def _resolve_packed_textures(norms, tmpdir):
     return reexported
 
 
-def _write_zip(dest_path, name, save_obj, tex_bytes):
+def _write_zip(dest_path, name, save_obj, tex_bytes, model_bytes=None):
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
     tmp = dest_path + ".tmp"
     json_bytes = json.dumps(save_obj, indent=2, ensure_ascii=False).encode("utf-8")
@@ -149,86 +150,195 @@ def _write_zip(dest_path, name, save_obj, tex_bytes):
         z.writestr(f"{name}/{name}.json", json_bytes)
         for basename, data in tex_bytes.items():
             z.writestr(f"{name}/Textures/{basename}", data)
+        for basename, data in (model_bytes or {}).items():
+            z.writestr(f"{name}/Models/{basename}", data)
     if os.path.exists(dest_path):
         os.remove(dest_path)
     os.replace(tmp, dest_path)
 
 
-def build_wlsave(norms, name, dest_path, skeleton_path=None):
-    """Build `dest_path` (.wlsave) from NormalizedMaterial[] `norms` as collection `name`.
-
-    Collection name, material names and texture basenames are sanitized to the
-    game's filename charset (see _sanitize_name). Returns a report dict: name,
-    nameOriginal, created[], renamed[], skipped[], texturesCopied[],
-    texturesReExported[], texturesMissing[], texturesRenamed[].
-    """
-    name_original = name
-    name = _sanitize_name(name, "Collection")
+def _load_skeleton(skeleton_path):
     if skeleton_path is None:
         skeleton_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skeleton.json")
     with open(skeleton_path, encoding="utf-8") as f:
-        skel = json.load(f)
+        return json.load(f)
 
-    report = {
+
+def _new_report(name, name_original, dest_path):
+    return {
         "name": name, "nameOriginal": name_original, "dest": dest_path,
         "created": [], "renamed": [], "skipped": [],
         "texturesCopied": [], "texturesReExported": [], "texturesMissing": [],
         "texturesRenamed": [],
     }
 
+
+def _build_material_entries(norms, name, report, tmpdir):
+    """Map -> sanitize+dedup+namespace material names -> gather textures. Mutates `report`.
+
+    Material names are namespaced "<name>/<final>" (both export modes); a prop's
+    CustomMaterial{i} references these exact strings. The "/" is legal in the `name`
+    field (an internal reference, not a filename). Returns (entries, tex_bytes,
+    material_names) where material_names maps the original Blender material name ->
+    its final namespaced customMaterials name.
+    """
+    reexported = _resolve_packed_textures(norms, tmpdir)
+
+    # Pass 1: map, sanitize + dedup + namespace names, gather unique textures by basename.
+    taken, mapped, unique_tex, material_names = set(), [], {}, {}
+    for norm in norms:
+        m = mapper.map_material(norm)
+        if not m:
+            report["skipped"].append(norm.get("name"))
+            continue
+        orig = m["entry"]["name"]                       # = Blender material name
+        final = _unique_name(_sanitize_name(orig, "Material"), taken)
+        if final != orig:
+            report["renamed"].append({"from": orig, "to": final})
+        taken.add(final)
+        namespaced = f"{name}/{final}"
+        m["entry"]["name"] = namespaced
+        material_names[orig] = namespaced
+        mapped.append(m)
+        for t in m["textures"]:
+            raw = t.get("basename")
+            if not raw:
+                continue
+            b = _sanitize_basename(raw)
+            t["basename"] = b
+            if b not in unique_tex:
+                unique_tex[b] = t.get("srcPath")
+                if b != raw:
+                    report["texturesRenamed"].append({"from": raw, "to": b})
+
+    # Read texture bytes (dedup by basename); classify copied vs re-exported.
+    tex_bytes = {}
+    for b, src in unique_tex.items():
+        if src and os.path.isfile(src):
+            with open(src, "rb") as fh:
+                tex_bytes[b] = fh.read()
+            (report["texturesReExported"] if b in reexported else report["texturesCopied"]).append(b)
+        else:
+            report["texturesMissing"].append({"basename": b, "src": src})
+
+    # Pass 2: finalize entries with only resolved texture paths.
+    entries = []
+    for m in mapped:
+        ok = [t for t in m["textures"] if t["basename"] in tex_bytes]
+        entry = mapper.apply_texture_paths(m["entry"], ok, name)
+        entry["name"] = m["entry"]["name"]
+        entries.append(entry)
+        report["created"].append(entry["name"])
+
+    return entries, tex_bytes, material_names
+
+
+def build_wlsave(norms, name, dest_path, skeleton_path=None):
+    """Build `dest_path` (.wlsave) from NormalizedMaterial[] `norms` as collection `name`.
+
+    Materials-only bundle. Collection name, material names and texture basenames are
+    sanitized to the game's filename charset (see _sanitize_name); material names are
+    additionally namespaced "<Collection>/<Mat>". Returns a report dict: name,
+    nameOriginal, created[], renamed[], skipped[], texturesCopied[],
+    texturesReExported[], texturesMissing[], texturesRenamed[].
+    """
+    name_original = name
+    name = _sanitize_name(name, "Collection")
+    skel = _load_skeleton(skeleton_path)
+    report = _new_report(name, name_original, dest_path)
+
     tmpdir = tempfile.mkdtemp(prefix="wlsave_tex_")
     try:
-        reexported = _resolve_packed_textures(norms, tmpdir)
-
-        # Pass 1: map, sanitize + dedup names, gather unique textures by basename.
-        taken, mapped, unique_tex = set(), [], {}
-        for norm in norms:
-            m = mapper.map_material(norm)
-            if not m:
-                report["skipped"].append(norm.get("name"))
-                continue
-            orig = m["entry"]["name"]
-            final = _unique_name(_sanitize_name(orig, "Material"), taken)
-            if final != orig:
-                report["renamed"].append({"from": orig, "to": final})
-            taken.add(final)
-            m["entry"]["name"] = final
-            mapped.append(m)
-            for t in m["textures"]:
-                raw = t.get("basename")
-                if not raw:
-                    continue
-                b = _sanitize_basename(raw)
-                t["basename"] = b
-                if b not in unique_tex:
-                    unique_tex[b] = t.get("srcPath")
-                    if b != raw:
-                        report["texturesRenamed"].append({"from": raw, "to": b})
-
-        # Read texture bytes (dedup by basename); classify copied vs re-exported.
-        tex_bytes = {}
-        for b, src in unique_tex.items():
-            if src and os.path.isfile(src):
-                with open(src, "rb") as fh:
-                    tex_bytes[b] = fh.read()
-                (report["texturesReExported"] if b in reexported else report["texturesCopied"]).append(b)
-            else:
-                report["texturesMissing"].append({"basename": b, "src": src})
-
-        # Pass 2: finalize entries with only resolved texture paths.
-        entries = []
-        for m in mapped:
-            ok = [t for t in m["textures"] if t["basename"] in tex_bytes]
-            entry = mapper.apply_texture_paths(m["entry"], ok, name)
-            entry["name"] = m["entry"]["name"]
-            entries.append(entry)
-            report["created"].append(entry["name"])
-
+        entries, tex_bytes, _ = _build_material_entries(norms, name, report, tmpdir)
         skel["level"] = ""
         skel["customMaterials"] = entries
         skel["bHasDedicatedIcon"] = False
-
         _write_zip(dest_path, name, skel, tex_bytes)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return report
+
+
+def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
+                       position_scale=1.0):
+    """Build a full-scene `.wlsave`: customMaterials + props (UserMesh/Group) + Models/ OBJs.
+
+    `norms`        — NormalizedMaterial[] for the materials used by the in-scope objects.
+    `norm_objects` — NormalizedObject[] (scene_introspect output) in export order.
+    `obj_exporter` — callable (mesh_key, dest_dir, used_basenames) -> basename | None. It
+                     writes one OBJ (+ optional sibling .mtl) into dest_dir and returns its
+                     basename. Production wires it to obj_export over the live bpy objects;
+                     tests inject a fake, so this assembly stays Blender-free and unit-testable.
+    `position_scale` — world scale factor (1 / scene Unit Scale) applied to prop positions; the
+                     same factor must be passed to obj_exporter as its geometry global_scale.
+
+    One OBJ per unique mesh datablock (instances reuse the same MeshPath). Material names are
+    namespaced; each prop's CustomMaterial{i} references them by that exact name. Returns the
+    materials report extended with: objectsExported[], objectsSkipped[], noUv[],
+    proceduralMaterials[], meshesWritten[], materialNamespaced.
+    """
+    name_original = name
+    name = _sanitize_name(name, "Collection")
+    skel = _load_skeleton(skeleton_path)
+    report = _new_report(name, name_original, dest_path)
+    report.update({"objectsExported": [], "objectsSkipped": [], "noUv": [],
+                   "proceduralMaterials": [], "meshesWritten": [], "meshExportFailed": [],
+                   "materialNamespaced": True})
+
+    tmpdir = tempfile.mkdtemp(prefix="wlsave_scene_")
+    try:
+        entries, tex_bytes, material_names = _build_material_entries(norms, name, report, tmpdir)
+
+        # One OBJ per unique mesh datablock (instances reuse it).
+        models_dir = os.path.join(tmpdir, "Models")
+        os.makedirs(models_dir, exist_ok=True)
+        mesh_path_by_key, model_bytes, used_basenames, failed_keys = {}, {}, set(), set()
+        for o in norm_objects:
+            key = o.get("mesh_key")
+            if not key or key in mesh_path_by_key or key in failed_keys:
+                continue
+            basename = obj_exporter(key, models_dir, used_basenames)
+            if not basename:
+                # Export failed: record it (so it isn't silent), don't retry the same datablock.
+                # Objects of this key keep MeshPath "" — still placed (hierarchy intact), no geometry.
+                failed_keys.add(key)
+                report["meshExportFailed"].append(key)
+                continue
+            used_basenames.add(basename)
+            obj_path = os.path.join(models_dir, basename)
+            if not os.path.isfile(obj_path):
+                continue
+            with open(obj_path, "rb") as fh:
+                model_bytes[basename] = fh.read()
+            mesh_path_by_key[key] = f"{name}/Models/{basename}"
+            report["meshesWritten"].append(basename)
+            mtl = os.path.splitext(basename)[0] + ".mtl"     # sibling .mtl, if the exporter wrote one
+            mtl_path = os.path.join(models_dir, mtl)
+            if os.path.isfile(mtl_path):
+                with open(mtl_path, "rb") as fh:
+                    model_bytes[mtl] = fh.read()
+
+        # Build props; tally the report.
+        props = []
+        for o in norm_objects:
+            mp = mesh_path_by_key.get(o.get("mesh_key"))
+            props.append(prop_mapper.map_object(o, mesh_path=mp, material_names=material_names,
+                                                position_scale=position_scale))
+            if o.get("kind") == "mesh":
+                report["objectsExported"].append(o.get("name"))
+                v = o.get("validation") or {}
+                if not v.get("has_uv"):
+                    report["noUv"].append(o.get("name"))
+                for pm in (v.get("procedural_materials") or []):
+                    if pm not in report["proceduralMaterials"]:
+                        report["proceduralMaterials"].append(pm)
+
+        skel["level"] = ""
+        skel["customMaterials"] = entries
+        skel["props"] = props
+        skel["bHasDedicatedIcon"] = False
+        _write_zip(dest_path, name, skel, tex_bytes, model_bytes)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 

@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "minervha_material_exporter"
-version = "0.2.1"
+version = "0.3.2"
 name = "Minervha Material Exporter"
 tagline = "Export Blender materials to Wild Life saves"
 maintainer = "Minervha Studio <217040744+Minervha@users.noreply.github.com>"

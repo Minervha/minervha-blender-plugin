@@ -1,0 +1,623 @@
+[
+  {
+    "label": "Root",
+    "labelColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 0
+    },
+    "position": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "rotation": {
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "roll": 0.0
+    },
+    "scale": {
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "guid": "FA03EB688AD8AA1DB593D33DABD89BAD",
+    "parent": "00000000000000000000000000000000",
+    "childIndex": 0,
+    "attachment": "None",
+    "bIsVisible": true,
+    "bIsCompletelyLocked": false,
+    "bCanReceiveEvents": true,
+    "bCanDispatchEvents": true,
+    "iD": "Group",
+    "bIsInteractable": true,
+    "bIsFoldedOut": false,
+    "boolSettings": {
+      "ShowIcon": true
+    },
+    "floatSettings": {},
+    "intSettings": {},
+    "colorSettings": {},
+    "stringSettings": {},
+    "vectorSettings": {},
+    "customEvents": {
+      "inEvents": {
+        "setVisibility": {
+          "eventId": "SetVisibility",
+          "keyboardShortcut": ""
+        },
+        "setCanReceiveEvents": {
+          "eventId": "SetCanReceiveEvents",
+          "keyboardShortcut": ""
+        },
+        "setCanDispatchEvents": {
+          "eventId": "SetCanDispatchEvents",
+          "keyboardShortcut": ""
+        },
+        "setOptionValue": {
+          "eventId": "SetOptionValue",
+          "keyboardShortcut": ""
+        },
+        "setVisibilityBelow": {
+          "eventId": "setVisibilityBelow",
+          "keyboardShortcut": ""
+        }
+      }
+    }
+  },
+  {
+    "label": "Floor",
+    "labelColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 0
+    },
+    "position": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": -0.5
+    },
+    "rotation": {
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "roll": 0.0
+    },
+    "scale": {
+      "x": 10,
+      "y": 10,
+      "z": 1
+    },
+    "guid": "F3F6D0343D56CE88CE7958170ED05CB3",
+    "parent": "FA03EB688AD8AA1DB593D33DABD89BAD",
+    "childIndex": 0,
+    "attachment": "None",
+    "bIsVisible": true,
+    "bIsCompletelyLocked": false,
+    "bCanReceiveEvents": true,
+    "bCanDispatchEvents": true,
+    "iD": "UserMesh",
+    "bIsInteractable": false,
+    "bIsFoldedOut": false,
+    "floatSettings": {
+      "Specular": 0.05,
+      "Roughness": 1.0,
+      "Metallic": 0.0,
+      "Texture Tiling": 1.0,
+      "Mass": 1000
+    },
+    "intSettings": {
+      "Material Type": 0
+    },
+    "colorSettings": {
+      "Color": {
+        "r": 0.25,
+        "g": 0.25,
+        "b": 0.25,
+        "a": 1
+      },
+      "emission": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      }
+    },
+    "boolSettings": {
+      "EnableCollision": false,
+      "UseTriplanarMapping": false,
+      "SimulatePhysics": false,
+      "ShowIcon": true
+    },
+    "vectorSettings": {},
+    "stringSettings": {
+      "Texture Override URL": "",
+      "MeshPath": "Scene/Models/FloorMesh.obj",
+      "CustomMaterial0": "",
+      "CustomMaterial1": "Scene/FloorMat"
+    },
+    "customEvents": {
+      "inEvents": {
+        "setVisibility": {
+          "eventId": "SetVisibility",
+          "keyboardShortcut": ""
+        },
+        "setCanReceiveEvents": {
+          "eventId": "SetCanReceiveEvents",
+          "keyboardShortcut": ""
+        },
+        "setCanDispatchEvents": {
+          "eventId": "SetCanDispatchEvents",
+          "keyboardShortcut": ""
+        },
+        "setOptionValue": {
+          "eventId": "SetOptionValue",
+          "keyboardShortcut": ""
+        }
+      }
+    }
+  },
+  {
+    "label": "Crate",
+    "labelColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 0
+    },
+    "position": {
+      "x": 2.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "rotation": {
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "roll": 90.0
+    },
+    "scale": {
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "guid": "007F02E6C93F2BE268B88351C16843C5",
+    "parent": "FA03EB688AD8AA1DB593D33DABD89BAD",
+    "childIndex": 1,
+    "attachment": "None",
+    "bIsVisible": true,
+    "bIsCompletelyLocked": false,
+    "bCanReceiveEvents": true,
+    "bCanDispatchEvents": true,
+    "iD": "UserMesh",
+    "bIsInteractable": false,
+    "bIsFoldedOut": false,
+    "floatSettings": {
+      "Specular": 0.05,
+      "Roughness": 1.0,
+      "Metallic": 0.0,
+      "Texture Tiling": 1.0,
+      "Mass": 1000
+    },
+    "intSettings": {
+      "Material Type": 0
+    },
+    "colorSettings": {
+      "Color": {
+        "r": 0.25,
+        "g": 0.25,
+        "b": 0.25,
+        "a": 1
+      },
+      "emission": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      }
+    },
+    "boolSettings": {
+      "EnableCollision": false,
+      "UseTriplanarMapping": false,
+      "SimulatePhysics": false,
+      "ShowIcon": true
+    },
+    "vectorSettings": {},
+    "stringSettings": {
+      "Texture Override URL": "",
+      "MeshPath": "Scene/Models/CrateMesh.obj",
+      "CustomMaterial0": "",
+      "CustomMaterial1": "Scene/WoodMat",
+      "CustomMaterial2": "Scene/MetalMat"
+    },
+    "customEvents": {
+      "inEvents": {
+        "setVisibility": {
+          "eventId": "SetVisibility",
+          "keyboardShortcut": ""
+        },
+        "setCanReceiveEvents": {
+          "eventId": "SetCanReceiveEvents",
+          "keyboardShortcut": ""
+        },
+        "setCanDispatchEvents": {
+          "eventId": "SetCanDispatchEvents",
+          "keyboardShortcut": ""
+        },
+        "setOptionValue": {
+          "eventId": "SetOptionValue",
+          "keyboardShortcut": ""
+        }
+      }
+    }
+  },
+  {
+    "label": "Crate.001",
+    "labelColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 0
+    },
+    "position": {
+      "x": -2.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "rotation": {
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "roll": 0.0
+    },
+    "scale": {
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "guid": "1E473EC44D0A2A126F9A38A86D3D43FB",
+    "parent": "FA03EB688AD8AA1DB593D33DABD89BAD",
+    "childIndex": 2,
+    "attachment": "None",
+    "bIsVisible": false,
+    "bIsCompletelyLocked": false,
+    "bCanReceiveEvents": true,
+    "bCanDispatchEvents": true,
+    "iD": "UserMesh",
+    "bIsInteractable": false,
+    "bIsFoldedOut": false,
+    "floatSettings": {
+      "Specular": 0.05,
+      "Roughness": 1.0,
+      "Metallic": 0.0,
+      "Texture Tiling": 1.0,
+      "Mass": 1000
+    },
+    "intSettings": {
+      "Material Type": 0
+    },
+    "colorSettings": {
+      "Color": {
+        "r": 0.25,
+        "g": 0.25,
+        "b": 0.25,
+        "a": 1
+      },
+      "emission": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      }
+    },
+    "boolSettings": {
+      "EnableCollision": false,
+      "UseTriplanarMapping": false,
+      "SimulatePhysics": false,
+      "ShowIcon": true
+    },
+    "vectorSettings": {},
+    "stringSettings": {
+      "Texture Override URL": "",
+      "MeshPath": "Scene/Models/CrateMesh.obj",
+      "CustomMaterial0": "",
+      "CustomMaterial1": "Scene/WoodMat",
+      "CustomMaterial2": ""
+    },
+    "customEvents": {
+      "inEvents": {
+        "setVisibility": {
+          "eventId": "SetVisibility",
+          "keyboardShortcut": ""
+        },
+        "setCanReceiveEvents": {
+          "eventId": "SetCanReceiveEvents",
+          "keyboardShortcut": ""
+        },
+        "setCanDispatchEvents": {
+          "eventId": "SetCanDispatchEvents",
+          "keyboardShortcut": ""
+        },
+        "setOptionValue": {
+          "eventId": "SetOptionValue",
+          "keyboardShortcut": ""
+        }
+      }
+    }
+  },
+  {
+    "label": "GlassLamp",
+    "labelColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 0
+    },
+    "position": {
+      "x": 0.0,
+      "y": 3.0,
+      "z": 1.0
+    },
+    "rotation": {
+      "pitch": 45.0,
+      "yaw": 0.0,
+      "roll": 0.0
+    },
+    "scale": {
+      "x": 0.5,
+      "y": 0.5,
+      "z": 0.5
+    },
+    "guid": "39674E2EC10406780E3FAF384251E1E9",
+    "parent": "00000000000000000000000000000000",
+    "childIndex": 1,
+    "attachment": "None",
+    "bIsVisible": true,
+    "bIsCompletelyLocked": false,
+    "bCanReceiveEvents": true,
+    "bCanDispatchEvents": true,
+    "iD": "UserMesh",
+    "bIsInteractable": false,
+    "bIsFoldedOut": false,
+    "floatSettings": {
+      "Specular": 0.05,
+      "Roughness": 1.0,
+      "Metallic": 0.0,
+      "Texture Tiling": 1.0,
+      "Mass": 1000
+    },
+    "intSettings": {
+      "Material Type": 0
+    },
+    "colorSettings": {
+      "Color": {
+        "r": 0.25,
+        "g": 0.25,
+        "b": 0.25,
+        "a": 1
+      },
+      "emission": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      }
+    },
+    "boolSettings": {
+      "EnableCollision": false,
+      "UseTriplanarMapping": false,
+      "SimulatePhysics": false,
+      "ShowIcon": true
+    },
+    "vectorSettings": {},
+    "stringSettings": {
+      "Texture Override URL": "",
+      "MeshPath": "Scene/Models/LampMesh.obj",
+      "CustomMaterial0": "",
+      "CustomMaterial1": "Scene/GlassMat"
+    },
+    "customEvents": {
+      "inEvents": {
+        "setVisibility": {
+          "eventId": "SetVisibility",
+          "keyboardShortcut": ""
+        },
+        "setCanReceiveEvents": {
+          "eventId": "SetCanReceiveEvents",
+          "keyboardShortcut": ""
+        },
+        "setCanDispatchEvents": {
+          "eventId": "SetCanDispatchEvents",
+          "keyboardShortcut": ""
+        },
+        "setOptionValue": {
+          "eventId": "SetOptionValue",
+          "keyboardShortcut": ""
+        }
+      }
+    }
+  },
+  {
+    "label": "ChainParent",
+    "labelColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 0
+    },
+    "position": {
+      "x": 5.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "rotation": {
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "roll": 0.0
+    },
+    "scale": {
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "guid": "EC77300B7A14BD5797696D0DC0782D1F",
+    "parent": "00000000000000000000000000000000",
+    "childIndex": 2,
+    "attachment": "None",
+    "bIsVisible": true,
+    "bIsCompletelyLocked": false,
+    "bCanReceiveEvents": true,
+    "bCanDispatchEvents": true,
+    "iD": "UserMesh",
+    "bIsInteractable": false,
+    "bIsFoldedOut": false,
+    "floatSettings": {
+      "Specular": 0.05,
+      "Roughness": 1.0,
+      "Metallic": 0.0,
+      "Texture Tiling": 1.0,
+      "Mass": 1000
+    },
+    "intSettings": {
+      "Material Type": 0
+    },
+    "colorSettings": {
+      "Color": {
+        "r": 0.25,
+        "g": 0.25,
+        "b": 0.25,
+        "a": 1
+      },
+      "emission": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      }
+    },
+    "boolSettings": {
+      "EnableCollision": false,
+      "UseTriplanarMapping": false,
+      "SimulatePhysics": false,
+      "ShowIcon": true
+    },
+    "vectorSettings": {},
+    "stringSettings": {
+      "Texture Override URL": "",
+      "MeshPath": "Scene/Models/LinkMesh.obj",
+      "CustomMaterial0": "",
+      "CustomMaterial1": "Scene/ChainMat"
+    },
+    "customEvents": {
+      "inEvents": {
+        "setVisibility": {
+          "eventId": "SetVisibility",
+          "keyboardShortcut": ""
+        },
+        "setCanReceiveEvents": {
+          "eventId": "SetCanReceiveEvents",
+          "keyboardShortcut": ""
+        },
+        "setCanDispatchEvents": {
+          "eventId": "SetCanDispatchEvents",
+          "keyboardShortcut": ""
+        },
+        "setOptionValue": {
+          "eventId": "SetOptionValue",
+          "keyboardShortcut": ""
+        }
+      }
+    }
+  },
+  {
+    "label": "ChainLeaf",
+    "labelColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 0
+    },
+    "position": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 1.0
+    },
+    "rotation": {
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "roll": 0.0
+    },
+    "scale": {
+      "x": -1,
+      "y": 1,
+      "z": 1
+    },
+    "guid": "CEBB124A899202E4209EF417F6DB3688",
+    "parent": "EC77300B7A14BD5797696D0DC0782D1F",
+    "childIndex": 0,
+    "attachment": "None",
+    "bIsVisible": true,
+    "bIsCompletelyLocked": false,
+    "bCanReceiveEvents": true,
+    "bCanDispatchEvents": true,
+    "iD": "UserMesh",
+    "bIsInteractable": false,
+    "bIsFoldedOut": false,
+    "floatSettings": {
+      "Specular": 0.05,
+      "Roughness": 1.0,
+      "Metallic": 0.0,
+      "Texture Tiling": 1.0,
+      "Mass": 1000
+    },
+    "intSettings": {
+      "Material Type": 0
+    },
+    "colorSettings": {
+      "Color": {
+        "r": 0.25,
+        "g": 0.25,
+        "b": 0.25,
+        "a": 1
+      },
+      "emission": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      }
+    },
+    "boolSettings": {
+      "EnableCollision": false,
+      "UseTriplanarMapping": false,
+      "SimulatePhysics": false,
+      "ShowIcon": true
+    },
+    "vectorSettings": {},
+    "stringSettings": {
+      "Texture Override URL": "",
+      "MeshPath": "Scene/Models/LinkMesh.obj",
+      "CustomMaterial0": "",
+      "CustomMaterial1": "Scene/ChainMat"
+    },
+    "customEvents": {
+      "inEvents": {
+        "setVisibility": {
+          "eventId": "SetVisibility",
+          "keyboardShortcut": ""
+        },
+        "setCanReceiveEvents": {
+          "eventId": "SetCanReceiveEvents",
+          "keyboardShortcut": ""
+        },
+        "setCanDispatchEvents": {
+          "eventId": "SetCanDispatchEvents",
+          "keyboardShortcut": ""
+        },
+        "setOptionValue": {
+          "eventId": "SetOptionValue",
+          "keyboardShortcut": ""
+        }
+      }
+    }
+  }
+]

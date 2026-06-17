@@ -1,0 +1,79 @@
+[
+  {
+    "name": "Root",
+    "kind": "group",
+    "mesh_key": null,
+    "parent_name": null,
+    "child_index": 0,
+    "visible": true,
+    "transform": {"location": [0, 0, 0], "rotation_euler": [0, 0, 0], "rotation_order": "XYZ", "scale": [1, 1, 1]},
+    "material_slots": [],
+    "validation": {"has_uv": false, "procedural_materials": [], "risky_transform": null}
+  },
+  {
+    "name": "Floor",
+    "kind": "mesh",
+    "mesh_key": "FloorMesh",
+    "parent_name": "Root",
+    "child_index": 0,
+    "visible": true,
+    "transform": {"location": [0, 0, -0.5], "rotation_euler": [0, 0, 0], "rotation_order": "XYZ", "scale": [10, 10, 1]},
+    "material_slots": ["FloorMat"],
+    "validation": {"has_uv": true, "procedural_materials": [], "risky_transform": null}
+  },
+  {
+    "name": "Crate",
+    "kind": "mesh",
+    "mesh_key": "CrateMesh",
+    "parent_name": "Root",
+    "child_index": 1,
+    "visible": true,
+    "transform": {"location": [2.0, 0.0, 0.0], "rotation_euler": [0, 0, 1.5707963267948966], "rotation_order": "XYZ", "scale": [1, 1, 1]},
+    "material_slots": ["WoodMat", "MetalMat"],
+    "validation": {"has_uv": true, "procedural_materials": [], "risky_transform": null}
+  },
+  {
+    "name": "Crate.001",
+    "kind": "mesh",
+    "mesh_key": "CrateMesh",
+    "parent_name": "Root",
+    "child_index": 2,
+    "visible": false,
+    "transform": {"location": [-2.0, 0.0, 0.0], "rotation_euler": [0, 0, 0], "rotation_order": "XYZ", "scale": [1, 1, 1]},
+    "material_slots": ["WoodMat", null],
+    "validation": {"has_uv": true, "procedural_materials": [], "risky_transform": null}
+  },
+  {
+    "name": "GlassLamp",
+    "kind": "mesh",
+    "mesh_key": "LampMesh",
+    "parent_name": null,
+    "child_index": 1,
+    "visible": true,
+    "transform": {"location": [0.0, 3.0, 1.0], "rotation_euler": [0.7853981633974483, 0, 0], "rotation_order": "XYZ", "scale": [0.5, 0.5, 0.5]},
+    "material_slots": ["GlassMat"],
+    "validation": {"has_uv": false, "procedural_materials": ["GlassMat"], "risky_transform": null}
+  },
+  {
+    "name": "ChainParent",
+    "kind": "mesh",
+    "mesh_key": "LinkMesh",
+    "parent_name": null,
+    "child_index": 2,
+    "visible": true,
+    "transform": {"location": [5.0, 0.0, 0.0], "rotation_euler": [0, 0, 0], "rotation_order": "XYZ", "scale": [1, 1, 1]},
+    "material_slots": ["ChainMat"],
+    "validation": {"has_uv": true, "procedural_materials": [], "risky_transform": null}
+  },
+  {
+    "name": "ChainLeaf",
+    "kind": "mesh",
+    "mesh_key": "LinkMesh",
+    "parent_name": "ChainParent",
+    "child_index": 0,
+    "visible": true,
+    "transform": {"location": [0.0, 0.0, 1.0], "rotation_euler": [0, 0, 0], "rotation_order": "XYZ", "scale": [-1, 1, 1]},
+    "material_slots": ["ChainMat"],
+    "validation": {"has_uv": true, "procedural_materials": [], "risky_transform": "negative scale"}
+  }
+]

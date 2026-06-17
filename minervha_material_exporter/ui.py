@@ -1,8 +1,9 @@
 """ui.py — Minervha N-panel + export operator.
 
-A "Minervha" sidebar panel in the 3D viewport with a scope dropdown and an Export
-.wlsave operator that builds a portable Wild Life collection bundle (opens a file-save
-dialog, then shows a report).
+A "Minervha" sidebar panel in the 3D viewport with a Materials/Scene mode toggle, a
+scope dropdown, and an Export .wlsave operator. Materials mode bundles just the
+materials; Scene mode also exports each object's geometry (UserMesh props), transforms
+and hierarchy (Group props). Opens a file-save dialog, then shows a report.
 """
 
 import bpy
@@ -10,15 +11,21 @@ from bpy.props import EnumProperty, PointerProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper
 
 try:
-    from . import introspect, wlsave_export   # packaged extension
+    from . import introspect, wlsave_export, scene_introspect, obj_export   # packaged extension
 except ImportError:                           # dev / sys.path import (live MCP)
-    import introspect, wlsave_export
+    import introspect, wlsave_export, scene_introspect, obj_export
 
 
 SCOPE_ITEMS = [
     ('SELECTED', "Selected Objects", "Materials used by the selected objects"),
     ('COLLECTION', "Blender Collection", "Materials used by objects in a chosen collection"),
     ('FILE', "Whole File", "Every material in the .blend"),
+]
+
+
+MODE_ITEMS = [
+    ('MATERIALS', "Materials", "Bundle only the materials (textures included)"),
+    ('SCENE', "Scene", "Export objects' geometry + transforms + hierarchy, with their materials"),
 ]
 
 
@@ -36,10 +43,27 @@ def _materials_for_scope(context):
     return introspect._materials_for_scope(context.scene.minervha_scope, _objects_for_scope(context))
 
 
+def _scene_objects(context):
+    """Objects to export in Scene mode. FILE scope means the whole scene's objects."""
+    scope = context.scene.minervha_scope
+    if scope == 'SELECTED':
+        return list(context.selected_objects)
+    if scope == 'COLLECTION':
+        coll = context.scene.minervha_collection
+        return list(coll.all_objects) if coll else []
+    return list(context.scene.objects)  # FILE -> whole scene
+
+
+def _scene_materials(objs):
+    """NormalizedMaterial[] for the materials used by `objs` (Scene mode). The
+    'COLLECTION' scope just means 'gather from the given objects' (any non-FILE scope)."""
+    return introspect.collect('COLLECTION', objs)
+
+
 class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     bl_idname = "minervha.export_wlsave"
     bl_label = "Export .wlsave"
-    bl_description = "Build a portable Wild Life collection bundle (.wlsave) of the materials"
+    bl_description = "Build a portable Wild Life collection bundle (.wlsave)"
     filename_ext = ".wlsave"
     filter_glob: StringProperty(default="*.wlsave", options={'HIDDEN'})
 
@@ -50,6 +74,11 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
 
     def execute(self, context):
         name = (context.scene.minervha_wlsave_name or "").strip()
+        if context.scene.minervha_export_mode == 'SCENE':
+            return self._execute_scene(context, name)
+        return self._execute_materials(context, name)
+
+    def _execute_materials(self, context, name):
         norms = introspect.collect(context.scene.minervha_scope, _objects_for_scope(context))
         if not norms:
             self.report({'WARNING'}, "No materials in the selected scope")
@@ -59,11 +88,38 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             self.filepath, len(report['created']),
             len(report['texturesCopied']) + len(report['texturesReExported']),
             len(report['texturesMissing'])))
+        self._popup(context, report)
+        return {'FINISHED'}
+
+    def _execute_scene(self, context, name):
+        objs = _scene_objects(context)
+        if not objs:
+            self.report({'WARNING'}, "No objects in the selected scope")
+            return {'CANCELLED'}
+        norms = _scene_materials(objs)
+        norm_objects = scene_introspect.collect(context.scene.minervha_scope, objs)
+        if not norm_objects:
+            self.report({'WARNING'}, "No exportable objects (meshes/empties) in scope")
+            return {'CANCELLED'}
+        # World scale = 1 / scene Unit Scale (e.g. Unit Scale 0.01 -> x100), applied UNIFORMLY to
+        # geometry (obj global_scale) and prop positions — one scene-wide scale, not per-object.
+        unit = context.scene.unit_settings.scale_length or 1.0
+        world_scale = 1.0 / unit
+        exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(objs),
+                                                global_scale=world_scale)
+        report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
+                                                  position_scale=world_scale)
+        self.report({'INFO'}, "Built %s — %d objects, %d meshes, %d materials (%d no-UV)" % (
+            self.filepath, len(report['objectsExported']), len(report['meshesWritten']),
+            len(report['created']), len(report['noUv'])))
+        self._popup(context, report)
+        return {'FINISHED'}
+
+    def _popup(self, context, report):
         try:
             _popup_report(context, report)
         except Exception:
             pass  # popup needs UI context; the status-bar report above always fires
-        return {'FINISHED'}
 
 
 def _popup_report(context, report):
@@ -84,6 +140,17 @@ def _popup_report(context, report):
             layout.label(text="Renamed (sanitized/clash): %d" % len(report['renamed']))
         if report['skipped']:
             layout.label(text="Skipped (no node tree): %d" % len(report['skipped']))
+        # Scene-mode counters (present only for a scene export).
+        if 'objectsExported' in report:
+            layout.separator()
+            layout.label(text="Objects exported: %d" % len(report['objectsExported']))
+            layout.label(text="Meshes written: %d" % len(report['meshesWritten']))
+            if report['noUv']:
+                layout.label(text="Objects without UVs: %d" % len(report['noUv']), icon='ERROR')
+            if report['proceduralMaterials']:
+                layout.label(text="Procedural materials (bake manually): %d" % len(report['proceduralMaterials']), icon='ERROR')
+            if report.get('meshExportFailed'):
+                layout.label(text="Meshes failed to export: %d" % len(report['meshExportFailed']), icon='ERROR')
     context.window_manager.popup_menu(draw, title="Minervha — Export report", icon='CHECKMARK')
 
 
@@ -99,14 +166,26 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         layout = self.layout
 
         col = layout.column()
+        col.prop(scene, "minervha_export_mode", text="Mode", expand=True)
         col.prop(scene, "minervha_scope", text="Scope")
         if scene.minervha_scope == 'COLLECTION':
             col.prop(scene, "minervha_collection", text="")
+
+        scene_mode = scene.minervha_export_mode == 'SCENE'
         try:
-            count = len(_materials_for_scope(context))
-            col.label(text="%d material(s) in scope" % count)
+            if scene_mode:
+                col.label(text="%d object(s) in scope" % len(_scene_objects(context)))
+            else:
+                col.label(text="%d material(s) in scope" % len(_materials_for_scope(context)))
         except Exception:
             pass
+
+        if scene_mode:
+            note = layout.box()
+            note.label(text="Scene export limits:", icon='INFO')
+            note.label(text="• meshes need UVs")
+            note.label(text="• procedural textures: bake first")
+            note.label(text="• verify transforms in-game")
 
         layout.separator()
         box = layout.box()
@@ -119,6 +198,7 @@ _classes = (MINERVHA_OT_export_wlsave, MINERVHA_PT_exporter)
 
 
 def register():
+    bpy.types.Scene.minervha_export_mode = EnumProperty(name="Mode", items=MODE_ITEMS, default='MATERIALS')
     bpy.types.Scene.minervha_scope = EnumProperty(name="Scope", items=SCOPE_ITEMS, default='SELECTED')
     bpy.types.Scene.minervha_collection = PointerProperty(name="Collection", type=bpy.types.Collection)
     bpy.types.Scene.minervha_wlsave_name = StringProperty(name="Name", default="MyMaterials")
@@ -129,6 +209,6 @@ def register():
 def unregister():
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
-    for prop in ("minervha_scope", "minervha_collection", "minervha_wlsave_name"):
+    for prop in ("minervha_export_mode", "minervha_scope", "minervha_collection", "minervha_wlsave_name"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

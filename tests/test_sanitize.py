@@ -91,7 +91,12 @@ def test_build_wlsave_paths_are_safe():
             data = json.loads(z.read("Beton_Special/Beton_Special.json"))
 
         mat = data["customMaterials"][0]
-        assert mat["name"] == "Beton_Special", mat["name"]
+        # Material names are namespaced "<Collection>/<Mat>" (both export modes). The "/" is a literal
+        # separator in the name field (internal reference, NOT a filename) — each half must be game-safe.
+        assert mat["name"] == "Beton_Special/Beton_Special", mat["name"]
+        prefix, _, suffix = mat["name"].partition("/")
+        assert SAFE_RE.match(prefix) and SAFE_RE.match(suffix), mat["name"]
+        # Texture *paths* are unaffected by namespacing.
         assert mat["diffuseTexturePath"] == "Beton_Special/Textures/cafe.png", mat["diffuseTexturePath"]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
