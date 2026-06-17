@@ -5,7 +5,7 @@ Blender **4.2+** extension that exports a Blender scene's materials to **Wild Li
 - **`.txt`** — the format read by **Minervha Studio**'s injector (maps the materials into a save).
 - **`.wlsave`** — a **self-contained collection bundle** (JSON + textures), installable directly via the Studio.
 
-> 🚧 **WIP** — under development. See [`docs/plans/MASTER.md`](docs/plans/MASTER.md) for the design and progress.
+> 🚧 **WIP** — under development.
 
 ## Installation (dev)
 
@@ -21,7 +21,6 @@ minervha_material_exporter/   # extension source (build root)
   __init__.py                  # register / UI
   mapper.py                    # NormalizedMaterial -> customMaterials (port of mapMaterial.js)
   skeleton.json                # collection skeleton for the .wlsave
-docs/plans/                    # MASTER.md + implementation chunks
 tests/                         # parity tests (Python port vs Studio JS)
 ```
 

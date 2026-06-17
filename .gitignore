@@ -5,5 +5,8 @@ __pycache__/
 *.blend2
 /dist/
 /build/
+
+# Local planning docs — not published
+/docs/
 .DS_Store
 Thumbs.db
