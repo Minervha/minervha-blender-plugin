@@ -28,14 +28,81 @@ except ImportError:
     import wlsave_export
 
 # Calibrated in-game (chunk-06): the ORIENTATION fix lives here (on the OBJ), not on the prop
-# rotation. forward='Y'/up='Z' = Blender's native axes (no remap) so geometry stays Z-up like WL —
-# the operator's default (NEGATIVE_Z/Y) was remapping to Y-up and laying meshes down.
-FORWARD_AXIS = "Y"
-UP_AXIS = "Z"
+# rotation. WL imports a mesh rotated 180 deg about X — with the native axes an asymmetric model
+# came in UPSIDE DOWN *and* FACING BACKWARD — so we pre-rotate the export by the same 180 deg about
+# X to cancel it: forward='NEGATIVE_Y'/up='NEGATIVE_Z' writes vertices as (x, -y, -z). It is a proper
+# rotation (det +1), so face winding/normals stay correct (NOT a mirror), and it's consistent with the
+# prop position convention (prop_mapper negates only position.z; WL's placement flips Z, not Y). The
+# old forward='Y'/up='Z' (native/identity) is what left meshes upside-down+backward; the operator's own
+# default (NEGATIVE_Z/Y) instead lays them down.
+FORWARD_AXIS = "NEGATIVE_Y"
+UP_AXIS = "NEGATIVE_Z"
 # Scale is NOT hardcoded here: the caller passes one "world" scale as `global_scale` (= 100 x scene Unit
 # Scale, the Blender-metres -> WL-centimetres factor) and it is applied UNIFORMLY to geometry here AND to
 # prop positions in prop_mapper (never per-object). wm.obj_export does not honour scene unit scale itself
 # (no use_scene_unit option), so the caller passes the factor explicitly.
+
+
+def _usemtl_order(obj_text):
+    """Material names in first-`usemtl`-appearance order in an OBJ. For wm.obj_export this
+    equals the Blender material-slot order. Deduplicated, order-preserving."""
+    order = []
+    for line in obj_text.splitlines():
+        if line.startswith("usemtl "):
+            name = line[7:].strip()
+            if name and name not in order:
+                order.append(name)
+    return order
+
+
+def reorder_mtl_blocks(obj_text, mtl_text):
+    """Rewrite an .mtl so its `newmtl` blocks follow the .obj's `usemtl` (= slot) order.
+
+    wm.obj_export writes `usemtl` in Blender slot order but `newmtl` ALPHABETICALLY. Wild
+    Life indexes a mesh's material sections by the .mtl's `newmtl` order and overrides them
+    with the prop's CustomMaterial{i} (also slot order), so an alphabetical .mtl SWAPS the
+    materials on any multi-material mesh whose slot order isn't already alphabetical (the
+    reported wood<->fabric bug). Reordering the .mtl to the .obj's order realigns the two.
+    Materials not referenced by any `usemtl` keep their original relative order, appended last.
+    """
+    header, blocks, order, cur = [], {}, [], None
+    for line in mtl_text.splitlines(keepends=True):
+        if line.startswith("newmtl "):
+            cur = line[7:].strip()
+            blocks[cur] = [line]
+            order.append(cur)
+        elif cur is None:
+            header.append(line)
+        else:
+            blocks[cur].append(line)
+
+    want = _usemtl_order(obj_text)
+    seq = [n for n in want if n in blocks] + [n for n in order if n not in want]
+    if seq == order:
+        return mtl_text                       # already aligned -> leave the file untouched
+    out = list(header)
+    for n in seq:
+        out.extend(blocks[n])
+    return "".join(out)
+
+
+def _reorder_sidecar_mtl(obj_path):
+    """Reorder the .obj's sibling .mtl in place so material order matches usemtl/slot order.
+    Best-effort: a parse/IO failure must not fail the export (the OBJ is already written)."""
+    mtl_path = os.path.splitext(obj_path)[0] + ".mtl"
+    if not os.path.isfile(mtl_path):
+        return
+    try:
+        with open(obj_path, encoding="utf-8") as f:
+            obj_text = f.read()
+        with open(mtl_path, encoding="utf-8") as f:
+            mtl_text = f.read()
+        new_text = reorder_mtl_blocks(obj_text, mtl_text)
+        if new_text != mtl_text:
+            with open(mtl_path, "w", encoding="utf-8") as f:
+                f.write(new_text)
+    except Exception:
+        pass
 
 
 def export_mesh_obj(src_object, dest_dir, used_basenames, write_mtl=True, global_scale=1.0):
@@ -86,6 +153,10 @@ def export_mesh_obj(src_object, dest_dir, used_basenames, write_mtl=True, global
             up_axis=UP_AXIS,
             global_scale=global_scale,
         )
+        if write_mtl:
+            # wm.obj_export writes the .mtl alphabetically; realign it to slot order so
+            # WL maps each section to the right CustomMaterial (see reorder_mtl_blocks).
+            _reorder_sidecar_mtl(dest)
     except Exception:
         # Broad on purpose: one bad mesh must not abort the whole scene export. The caller
         # (build_scene_wlsave) records the failed mesh in the report so it isn't silent.
