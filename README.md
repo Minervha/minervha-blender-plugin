@@ -53,6 +53,11 @@ tests/                          # Python<->JS parity (mapper golden)
 `mapper.py` is a faithful port of the Studio's `mapMaterial.js`, kept honest by a golden parity test, so the
 materials written into the `.wlsave` match what the Studio would produce.
 
+## Credits
+
+The Principled BSDF node-tracing at the heart of this addon (`bsdf_trace.py`) is a port of an original
+Blender material-export script by **Nocna Klacz** — huge thanks for the foundation this is built on.
+
 ## License
 
 GPL-3.0-or-later (bpy add-ons are derivative works of Blender).

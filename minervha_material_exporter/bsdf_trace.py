@@ -1,7 +1,9 @@
 """bsdf_trace.py — Blender node-tracing helpers.
 
-Behavior-preserving port of the tracing logic in MaterialPrint_hardened.py, used by
-introspect.py to read each material's Principled BSDF, textures, slots and mapping.
+Behavior-preserving port of the tracing logic in the original Blender material-export
+script by **Nocna Klacz** (MaterialPrint_hardened.py) — used here by introspect.py to
+read each material's Principled BSDF, textures, slots and mapping. Big thanks to Nocna
+Klacz for the base this is built on.
 
 Blender-only module (imports bpy for image-path resolution).
 """
