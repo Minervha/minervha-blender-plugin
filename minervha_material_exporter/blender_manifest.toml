@@ -1,10 +1,10 @@
 schema_version = "1.0.0"
 
 id = "minervha_material_exporter"
-version = "0.1.0"
+version = "0.2.0"
 name = "Minervha Material Exporter"
 tagline = "Export Blender materials to Wild Life saves"
-maintainer = "Minervha Studio <lou.31cool@gmail.com>"
+maintainer = "Minervha Studio <217040744+Minervha@users.noreply.github.com>"
 type = "add-on"
 
 # Add-on tags from Blender's allowed list.
@@ -18,4 +18,4 @@ license = ["SPDX:GPL-3.0-or-later"]
 # The add-on reads texture files and writes a .wlsave export to a user-chosen
 # location (outside the extension directory).
 [permissions]
-files = "Read scene textures and write a .wlsave collection bundle to a location you choose"
+files = "Read scene textures and write a .wlsave to a chosen folder"
