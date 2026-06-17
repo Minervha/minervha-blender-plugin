@@ -1,28 +1,30 @@
 # Minervha Blender Plugin — Material Exporter
 
-Extension **Blender 4.2+** qui exporte les matériaux d'une scène Blender vers **Wild Life**, de deux façons :
+Blender **4.2+** extension that exports a Blender scene's materials to **Wild Life**, two ways:
 
-- **`.txt`** — le format lu par l'injecteur de **Minervha Studio** (mappe les matières dans une save).
-- **`.wlsave`** — un **bundle de collection autonome** (JSON + textures), installable directement via le Studio.
+- **`.txt`** — the format read by **Minervha Studio**'s injector (maps the materials into a save).
+- **`.wlsave`** — a **self-contained collection bundle** (JSON + textures), installable directly via the Studio.
 
-> 🚧 **WIP** — en cours de développement. Voir [`docs/plans/MASTER.md`](docs/plans/MASTER.md) pour le design et l'avancement.
+> 🚧 **WIP** — under development. See [`docs/plans/MASTER.md`](docs/plans/MASTER.md) for the design and progress.
 
 ## Installation (dev)
 
-1. Récupère le `.zip` de l'extension (dossier `dist/`, ou zippe `minervha_material_exporter/`).
-2. Blender → **Edit → Preferences → Add-ons →** ⌄ → **Install from Disk…** → choisis le `.zip`.
-3. Dans le viewport 3D : **N** → onglet **« Minervha »**.
+1. Grab the extension `.zip` (in `dist/`, or zip the `minervha_material_exporter/` folder).
+2. Blender → **Edit → Preferences → Add-ons →** ⌄ → **Install from Disk…** → pick the `.zip`.
+3. In the 3D viewport: **N** → **"Minervha"** tab.
 
 ## Structure
 
 ```
-minervha_material_exporter/   ← source de l'Extension (racine de build)
-  blender_manifest.toml        manifeste Extension 4.2+
-  __init__.py                  register / UI
-  skeleton.json                squelette de collection pour le .wlsave
-docs/plans/                    MASTER.md + chunks d'implémentation
+minervha_material_exporter/   # extension source (build root)
+  blender_manifest.toml        # Blender 4.2+ extension manifest
+  __init__.py                  # register / UI
+  mapper.py                    # NormalizedMaterial -> customMaterials (port of mapMaterial.js)
+  skeleton.json                # collection skeleton for the .wlsave
+docs/plans/                    # MASTER.md + implementation chunks
+tests/                         # parity tests (Python port vs Studio JS)
 ```
 
-## Licence
+## License
 
-GPL-3.0-or-later (les add-ons `bpy` sont des œuvres dérivées de Blender).
+GPL-3.0-or-later (bpy add-ons are derivative works of Blender).

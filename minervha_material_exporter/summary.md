@@ -1,16 +1,15 @@
 # summary — `minervha_material_exporter/`
 
-Source de l'Extension Blender 4.2+ (ce dossier = racine de build, zippé pour l'install).
+Source of the Blender 4.2+ extension (this folder = build root, zipped for install).
 
-| Fichier | Rôle | Dépendances | Plans |
+| File | Role | Dependencies | Plans |
 |---|---|---|---|
-| `blender_manifest.toml` | Manifeste Extension (id, version, min 4.2.0, permission `files`, licence GPL) | — | chunk-01 |
-| `__init__.py` | `register`/`unregister` + panneau **placeholder** N-panel « Minervha » | `bpy` | chunk-01 (UI réelle → chunk-06) |
-| `skeleton.json` | Squelette collection bundlé (en-tête réel, tableaux vidés) — base du `.wlsave` | — | chunk-01 (consommé par `wlsave_export.py`, chunk-05) |
-| `mapper.py` | `NormalizedMaterial` → entrée `customMaterials` (port fidèle de `mapMaterial.js`) | — (pur, pas de `bpy`) | chunk-04 (parité golden dans `tests/`) |
+| `blender_manifest.toml` | Extension manifest (id, version, min 4.2.0, `files` permission, GPL license) | — | chunk-01 |
+| `__init__.py` | `register`/`unregister` + **placeholder** "Minervha" N-panel | `bpy` | chunk-01 (real UI → chunk-06) |
+| `skeleton.json` | Bundled collection skeleton (real header, emptied arrays) — base of the `.wlsave` | — | chunk-01 (consumed by `wlsave_export.py`, chunk-05) |
+| `mapper.py` | `NormalizedMaterial` → `customMaterials` entry (faithful port of `mapMaterial.js`) | — (pure, no `bpy`) | chunk-04 (golden parity in `tests/`) |
 
-À venir : `introspect.py` (chunk-02), `txt_export.py` (chunk-03), `wlsave_export.py` (chunk-05),
-`ui.py` (chunk-06).
+Upcoming: `bsdf_trace.py` + `introspect.py` (chunk-02), `txt_export.py` (chunk-03),
+`wlsave_export.py` (chunk-05), `ui.py` (chunk-06).
 
-Tests (`../tests/`) : `test_mapper.py` (parité Python↔JS), fixtures + golden régénérable via
-`_gen_golden.cjs`.
+Tests (`../tests/`): `test_mapper.py` (Python↔JS parity), fixtures + golden regenerable via `_gen_golden.cjs`.

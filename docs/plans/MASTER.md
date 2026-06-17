@@ -1,138 +1,132 @@
-# MASTER — Plugin Blender « Minervha Material Exporter »
+# MASTER — Blender Plugin "Minervha Material Exporter"
 
-**Statut :** design **validé** (brainstorming terminé) — en attente de **2 artefacts** avant implémentation
-**Date :** 2026-06-17
-**Emplacement projet :** `F:\Minervha\Studio\Minervha Blender Plugin` (projet frère de « Minervha Studio » / « Minervha Site », **git propre**)
-**Cible :** Extension **Blender 4.2+** (`blender_manifest.toml`), `.zip` installable
+**Status:** design **approved** (brainstorming done) — building chunk by chunk
+**Date:** 2026-06-17
+**Project location:** `F:\Minervha\Studio\Minervha Blender Plugin` (sibling of "Minervha Studio" / "Minervha Site", **own git** → GitHub public `Minervha/minervha-blender-plugin`, branch `main`)
+**Target:** Blender **4.2+** extension (`blender_manifest.toml`), installable `.zip`
 
 ---
 
-## Point de départ (état actuel)
+## Starting point (current state)
 
-- Un script Blender `MaterialPrint_hardened.py` exporte les matériaux (Principled BSDF + textures) d'une
-  scène dans un `.txt` (`texture_usage.txt`). Il tourne **à la main** (éditeur de texte Blender), pas de
-  packaging.
-- Le **Studio** (Electron/JS) lit ce `.txt` et injecte les matières dans une save/collection :
-  - `electron-helpers/materialInjector/blenderParse.js` — parser `.txt` → `MaterialNormalized[]`
-  - `electron-helpers/materialInjector/mapMaterial.js` — normalisé → entrée `customMaterials` + textures
-  - `electron-helpers/materialInjector/injectMaterials.js` — écrit dans la save + copie textures
-- Format `.wlsave` (confirmé via `wlsaveOps.js::exportWlsave`) = **ZIP** :
+- A Blender script `MaterialPrint_hardened.py` exports a scene's materials (Principled BSDF + textures)
+  to a `.txt` (`texture_usage.txt`). It runs **by hand** (Blender text editor), no packaging.
+- **Minervha Studio** (Electron/JS) reads that `.txt` and injects the materials into a save/collection:
+  - `electron-helpers/materialInjector/blenderParse.js` — `.txt` parser → `MaterialNormalized[]`
+  - `electron-helpers/materialInjector/mapMaterial.js` — normalized → `customMaterials` entry + textures
+  - `electron-helpers/materialInjector/injectMaterials.js` — writes into the save + copies textures
+- `.wlsave` format (confirmed in `wlsaveOps.js::exportWlsave`) = a **ZIP**:
   ```
-  <Name>/<Name>.json          ← save JSON (collection ⇒ "level": "")
-  <Name>/<Name>.png           ← vignette optionnelle
-  <Name>/Textures/<tex>.png   ← textures référencées, bundlées
+  <Name>/<Name>.json          # save JSON (collection => "level": "")
+  <Name>/<Name>.png           # optional thumbnail
+  <Name>/Textures/<tex>.png   # referenced textures, bundled
   ```
-  et dans le JSON : `*TexturePath = "<Name>/Textures/<basename>"`.
+  and inside the JSON: `*TexturePath = "<Name>/Textures/<basename>"`.
 
-## Objectif final
+## Final objective
 
-Une **Extension Blender 4.2+** avec un panneau (N-panel « Minervha ») offrant **DEUX exports** :
-- **A. `.txt`** — format actuel, lu par le Studio (chemin existant inchangé).
-- **B. `.wlsave`** — **bundle portable autonome** (collection) contenant le `.json` + les textures,
-  installable via le flux d'install existant du Studio.
+A **Blender 4.2+ extension** with a panel ("Minervha" N-panel) offering **TWO exports**:
+- **A. `.txt`** — current format, read by the Studio (existing path unchanged).
+- **B. `.wlsave`** — a **self-contained portable bundle** (collection) containing the `.json` + textures,
+  installable through the Studio's existing install flow.
 
-## Critères de succès
+## Success criteria
 
-1. L'Extension s'installe dans Blender 4.2+ (drag-drop) et affiche le panneau « Minervha ».
-2. **Mode A** : le `.txt` produit est **byte-compatible** avec `blenderParse.js` (parse sans régression).
-3. **Mode B** : le `.wlsave` produit s'importe dans le Studio → la collection apparaît avec ses matières
-   et leurs textures affichées en jeu.
-4. Le `customMaterials[]` du mode B est **identique** à ce que produit `injectMaterials.js` sur la même
-   scène (garanti par le golden file / test de parité).
-5. Textures packed/generated/`.tga` (que le chemin `.txt`→Studio ne résout pas) sont **résolues** dans le
-   `.wlsave` via ré-export PNG.
+1. The extension installs into Blender 4.2+ (drag-and-drop) and shows the "Minervha" panel.
+2. **Mode A:** the produced `.txt` is parsed by `blenderParse.js` with no regression.
+3. **Mode B:** the produced `.wlsave` imports into the Studio → the collection appears with its materials
+   and their textures shown in-game.
+4. Mode B's `customMaterials[]` is **identical** to what `injectMaterials.js` produces for the same scene
+   (guaranteed by the golden / parity test).
+5. Packed/generated/`.tga` textures (which the `.txt`→Studio path cannot resolve) are **resolved** in the
+   `.wlsave` via PNG re-export.
 
 ---
 
 ## Scope
 
-**Dans le scope :**
-- Introspection scène → `NormalizedMaterial[]` (même forme que la sortie de `blenderParse.js`).
-- **Sélecteur de scope par export** : objets sélectionnés / Collection Blender / fichier entier.
-- Serializer **A** : `.txt` byte-compatible avec `blenderParse.js`.
-- Serializer **B** : mapper (**port fidèle** de `mapMaterial.js`) → `customMaterials[]` → squelette
-  collection **bundlé** → ZIP `.wlsave`.
-- **Textures** : copie PNG/JPG tels quels ; **ré-export PNG via Blender** des `packed`/`generated`/`.tga` ;
-  dédup par basename ; ref `<Name>/Textures/<basename>` ; color space respecté (Non-Color pour
-  normal/rough/metallic, sRGB pour base/emissive).
-- Squelette collection **bundlé** (`skeleton.json`) dérivé d'une vraie save fournie.
-- UI N-panel + **rapport** post-run (matières créées, textures bundlées/ré-exportées/ignorées).
-- Packaging Extension 4.2+ (`blender_manifest.toml`) → `.zip` installable.
-- Garde **anti-drift** : golden file (snapshot de la sortie `customMaterials` attendue) + test de parité
-  Python↔JS sur la fixture `sampleExport.js`.
+**In scope:**
+- Scene introspection → `NormalizedMaterial[]` (same shape as `blenderParse.js` output).
+- **Per-export scope selector:** selected objects / Blender Collection / whole file.
+- Serializer **A**: `.txt`, byte-identical to what the original script produces (parsed by `blenderParse.js`).
+- Serializer **B**: mapper (**faithful port** of `mapMaterial.js`) → `customMaterials[]` → **bundled**
+  collection skeleton → `.wlsave` ZIP.
+- **Textures:** copy PNG/JPG as-is; **re-export packed/generated/`.tga` as PNG via Blender**; dedup by
+  basename; ref `<Name>/Textures/<basename>`; color space preserved (Non-Color for normal/rough/metallic,
+  sRGB for base/emissive).
+- **Bundled** collection skeleton (`skeleton.json`) derived from a real game save.
+- N-panel UI + post-run **report** (materials created, textures bundled/re-exported/skipped).
+- Extension packaging 4.2+ (`blender_manifest.toml`) → installable `.zip`.
+- **No-drift guard:** golden file (snapshot of the expected `customMaterials` output) + Python↔JS parity
+  test on shared fixtures.
 
-**Hors scope (explicitement) :**
-- Écriture directe dans le dossier `Saved` du jeu (mode B = `.wlsave` portable **uniquement**).
-- Application des matières à un prop (`MaterialOverride`).
-- Vignette/icône de collection en **v1** (`bHasDedicatedIcon:false` ; ajout via OpenGL render plus tard).
-- Round-trip inverse WL → Blender.
-- Support Blender < 4.2.
+**Out of scope (explicitly):**
+- Writing directly into the game's `Saved` folder (mode B = portable `.wlsave` **only**).
+- Applying materials to a prop (`MaterialOverride`).
+- Collection thumbnail/icon in **v1** (`bHasDedicatedIcon:false`; OpenGL render can be added later).
+- Reverse round-trip WL → Blender.
+- Blender < 4.2 support.
 
 ---
 
-## Architecture — un cœur, deux serializers
+## Architecture — shared tracing core, two serializers
 
-> Reproduit la stratification éprouvée du Studio (`parse → map → inject`) pour que les deux sorties ne
-> puissent **jamais** diverger sur ce qu'elles lisent.
+> Mirrors the Studio's proven `parse → map → inject` layering so the two outputs can never disagree about
+> what they read from the scene. The node-tracing helpers from the original script are the single shared
+> unit; mode A stays byte-identical, mode B builds the normalized model on top of the same tracing.
 
 ```
-Introspection scène ──▶ NormalizedMaterial[]      (forme = sortie de blenderParse.js)
-                              ├─▶ Serializer A : texture_usage.txt   (byte-compatible blenderParse.js)
-                              └─▶ Serializer B : map → customMaterials[] → collection JSON → zip .wlsave
+Scene (bpy) ──[shared node tracing]──┐
+                                     ├─▶ Serializer A: texture_usage.txt   (byte-identical to the script)
+                                     └─▶ introspect → NormalizedMaterial[] ─▶ map → customMaterials[] → .wlsave
 ```
 
-### Modules Python
+### Python modules
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `blender_manifest.toml` + `__init__.py` | Manifeste Extension (min Blender 4.2.0) + register/unregister |
-| `introspect.py` | Lit Principled BSDF + nœuds textures de chaque matériau → `NormalizedMaterial`. Scope-aware. **Port de la logique du script actuel** |
-| `txt_export.py` | `NormalizedMaterial[]` → `.txt`, gardé **byte-identique** à ce que `blenderParse.js` parse |
-| `mapper.py` | `NormalizedMaterial` → entrée `customMaterials` — **port fidèle de `mapMaterial.js`** (clamps, channel map, emission folding, tiling/offset) |
-| `wlsave_export.py` | Textures (copie / ré-export / dédup) + remplit le squelette + écrit le ZIP au format `<Name>/<Name>.json` + `<Name>/Textures/…` |
-| `skeleton.json` | Squelette collection minimal bundlé (dérivé d'une vraie save) |
-| `ui.py` | N-panel « Minervha » (sidebar 3D) : scope, nom, 2 opérateurs, rapport |
+| `blender_manifest.toml` + `__init__.py` | Extension manifest (min Blender 4.2.0) + register/unregister |
+| `bsdf_trace.py` | Shared node-tracing helpers ported from the script (forward/backward trace, group walk, image resolution) |
+| `txt_export.py` | Writes the `.txt`, kept **byte-identical** to the original script's output |
+| `introspect.py` | Builds `NormalizedMaterial` from each material (for mode B). Scope-aware |
+| `mapper.py` | `NormalizedMaterial` → `customMaterials` entry — **faithful port of `mapMaterial.js`** |
+| `wlsave_export.py` | Textures (copy / re-export / dedup) + fills the skeleton + writes the ZIP `<Name>/<Name>.json` + `<Name>/Textures/…` |
+| `skeleton.json` | Minimal bundled collection skeleton (derived from a real save) |
+| `ui.py` | "Minervha" N-panel (3D sidebar): scope, name, two operators, report |
 
-### Flux `.wlsave` (mode B)
-scope + nom (panneau) → introspect → map chaque matière → gather textures uniques (copie PNG/JPG tels
-quels, ré-export packed/generated/`.tga` en PNG, dédup) → charge `skeleton.json`, set
-`customMaterials`/`name`/`level:""` → écrit le ZIP → rapport. Résultat : `.wlsave` portable installable
-via le Studio.
+### `.wlsave` flow (mode B)
+scope + name (panel) → introspect → map each material → gather unique textures (copy PNG/JPG as-is,
+re-export packed/generated/`.tga` as PNG, dedup) → load `skeleton.json`, set
+`customMaterials`/`name`/`level:""` → write the ZIP → report. Result: a portable `.wlsave` installable
+through the Studio.
 
 ---
 
-## Décisions verrouillées
+## Locked decisions
 
-1. **2 modes** : `.txt` (Studio) + `.wlsave` (bundle autonome).
-2. **Scope dropdown** par export (objets sélectionnés / Collection Blender / fichier entier).
-3. **Squelette bundlé** (`skeleton.json`), dérivé d'une vraie save.
-4. **Textures** : copie réelle PNG/JPG + ré-export PNG des packed/generated/`.tga`, dédup par basename.
+1. **Two modes**: `.txt` (Studio) + `.wlsave` (self-contained bundle).
+2. **Scope dropdown** per export (selected objects / Blender Collection / whole file).
+3. **Bundled skeleton** (`skeleton.json`), derived from a real save.
+4. **Textures**: copy real PNG/JPG + re-export packed/generated/`.tga` as PNG, dedup by basename.
 5. **Blender 4.2+ Extension** (`blender_manifest.toml`).
-6. **Emplacement** : projet frère sous `Studio\`, parité via **golden file** commité.
-7. **Pas de vignette** en v1.
-8. **Mode B = `.wlsave` portable**, pas d'écriture directe dans le jeu.
+6. **Location**: sibling project under `Studio\`, parity via a committed **golden file**.
+7. **No thumbnail** in v1.
+8. **Mode B = portable `.wlsave`**, no direct write into the game.
+9. **`.txt` byte-identical** to the original script (the parser drops mapping rotation, so the `.txt` is
+   built by reusing the script's logic, not reconstructed from the normalized model).
 
 ---
 
-## Artefacts requis avant implémentation
+## Implementation chunks
 
-1. **`MaterialPrint_hardened.py`** (script actuel) — pour porter l'introspection + le format `.txt`
-   fidèlement (pas de reverse-engineering).
-2. **Une vraie collection `.wlsave` ou son `.json`** (petite/vide idéale) — pour dériver `skeleton.json`
-   vérifié (`version`, `luaVersion`, `initialSaveVersion`, `lastUpgradeVersion`,
-   `maxCustomEventsPerTick`, `cameraOverrideSettings`).
+| # | Chunk | Status | Depends on |
+|---|---|---|---|
+| 1 | Scaffold extension (`blender_manifest.toml`, `__init__`, register) + `skeleton.json` | **done** | — |
+| 2 | `bsdf_trace.py` + `introspect.py` — scene → `NormalizedMaterial[]` (script port, scope-aware) | pending | needs Blender (live) |
+| 3 | `txt_export.py` — `.txt` byte-identical + round-trip parity vs `blenderParse.js` | pending | 2 (shared tracing) |
+| 4 | `mapper.py` — faithful port of `mapMaterial.js` + golden parity | **done** | — |
+| 5 | `wlsave_export.py` — textures (copy/re-export/dedup) + build JSON + ZIP `.wlsave` | pending | 1, 4 |
+| 6 | `ui.py` — N-panel, scope, two operators, report | pending | 3, 5 |
 
----
-
-## Découpage en chunks (prévisionnel — Phase 3)
-
-| # | Chunk | Dépend de |
-|---|---|---|
-| 1 | Scaffold Extension (`blender_manifest.toml`, `__init__`, register) + `skeleton.json` dérivé | artefact #2 |
-| 2 | `introspect.py` — scène → `NormalizedMaterial[]` (port du script, scope-aware) | artefact #1 |
-| 3 | `txt_export.py` — `NormalizedMaterial[]` → `.txt` byte-compatible + test parité parser | 2 |
-| 4 | `mapper.py` — port fidèle de `mapMaterial.js` + golden parité | 2 |
-| 5 | `wlsave_export.py` — textures (copie/ré-export/dédup) + build JSON + ZIP `.wlsave` | 1, 4 |
-| 6 | `ui.py` — N-panel, scope, 2 opérateurs, rapport | 3, 5 |
-
-> C2–C4 = pur traitement de données (testables hors Blender). C1/C5/C6 touchent l'API `bpy` / le packaging.
+> Chunk 4 is pure data (tested outside Blender). Chunks 2/6 (and the re-export part of 5) need Blender for
+> live validation.

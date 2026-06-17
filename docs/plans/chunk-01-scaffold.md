@@ -1,32 +1,33 @@
-# Chunk 01 — Scaffold Extension + `skeleton.json`
+# Chunk 01 — Scaffold extension + `skeleton.json`
 
-**Statut :** `done`
-**Dépend de :** artefact #2 (vraie collection) — **fourni**
-**Parent :** [`MASTER.md`](MASTER.md)
+**Status:** `done`
+**Depends on:** artifact #2 (a real collection) — **provided**
+**Parent:** [`MASTER.md`](MASTER.md)
 
-## Objectif
-Une Extension Blender 4.2+ **installable** (manifest + register) + le `skeleton.json` vérifié, dérivé
-d'une vraie collection du jeu.
+## Objective
+An **installable** Blender 4.2+ extension (manifest + register) + the verified `skeleton.json`, derived from
+a real game collection.
 
-## Fichiers touchés
-- `minervha_material_exporter/blender_manifest.toml` — manifeste Extension (id, version, min 4.2.0,
-  permission `files`, licence GPL).
-- `minervha_material_exporter/__init__.py` — `register`/`unregister` + **panneau placeholder** N-panel
-  « Minervha » (vérifie l'install ; remplacé par `ui.py` au chunk 6).
-- `minervha_material_exporter/skeleton.json` — squelette collection (en-tête réel + tableaux vidés).
-- `minervha_material_exporter/summary.md` — doc-hygiène du dossier.
+## Files touched
+- `minervha_material_exporter/blender_manifest.toml` — extension manifest (id, version, min 4.2.0, `files`
+  permission, GPL license).
+- `minervha_material_exporter/__init__.py` — `register`/`unregister` + a **placeholder** "Minervha" N-panel
+  (verifies install; replaced by `ui.py` in chunk 6).
+- `minervha_material_exporter/skeleton.json` — collection skeleton (real header + emptied arrays).
+- `minervha_material_exporter/summary.md` — folder doc.
 
-## Source du squelette
-Dérivé de `…\SandboxSaveGames\Collections\Clothes\Minervha Maya Top.json` (vraie save, `version:14`,
-`luaVersion:11`, bloc `cameraOverrideSettings` complet). Tableaux `props/characters/sexScenes/poses/
-customMaterials` **vidés**, `level:""`, `bHasDedicatedIcon:false`, `bOverrideCameraSettings:false`.
+## Skeleton source
+Derived from `…\SandboxSaveGames\Collections\Clothes\Minervha Maya Top.json` (real save, `version:14`,
+`luaVersion:11`, full `cameraOverrideSettings` block). Arrays `props/characters/sexScenes/poses/
+customMaterials` **emptied**, `level:""`, `bHasDedicatedIcon:false`, `bOverrideCameraSettings:false`.
 
 ## Watch-outs
-- Valeurs d'en-tête **numériques** (`14`, pas `"14"`) — comme les vraies saves.
-- Manifeste : `id` en `^[a-z][a-z0-9_]*$`, `tagline` ≤ 64 sans point final, licence GPL (bpy ⇒ dérivé GPL),
-  déclarer `[permissions] files` (on lit des textures + écrit `.txt`/`.wlsave` hors du dossier extension).
-- `__init__.py` **sans `bl_info`** (le manifeste le remplace en Extension 4.2+).
+- Header values are **numeric** (`14`, not `"14"`) — like real saves.
+- Manifest: `id` matches `^[a-z][a-z0-9_]*$`, `tagline` ≤ 64 with no trailing period, GPL license (bpy ⇒
+  derivative work of Blender), declare `[permissions] files` (we read textures + write `.txt`/`.wlsave`
+  outside the extension folder).
+- `__init__.py` carries **no `bl_info`** (the manifest replaces it in a 4.2+ extension).
 
-## Vérif
-- `blender --command extension validate minervha_material_exporter` (ou install drag-drop) sans erreur.
-- L'onglet « Minervha » apparaît dans la sidebar du viewport 3D.
+## Verification
+- `blender --command extension validate minervha_material_exporter` (or drag-and-drop install) with no error.
+- The "Minervha" tab shows up in the 3D viewport sidebar.
