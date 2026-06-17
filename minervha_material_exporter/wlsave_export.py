@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import tempfile
+import unicodedata
 import zipfile
 
 try:
@@ -34,10 +35,32 @@ except ImportError:
 
 _COPY_EXT = {".png", ".jpg", ".jpeg"}
 
+# The game only accepts ASCII [A-Za-z0-9_-] in the file/folder names it extracts
+# from a .wlsave; accents and other symbols corrupt it. Everything written as a
+# path component (collection name, material name, texture basename) is reduced to
+# that charset.
+_BAD_NAME_RE = re.compile(r"[^A-Za-z0-9_-]+")
 
-def _safe_component(s):
-    """A single safe path component (mirrors the Studio's isSafeFolderName)."""
-    return bool(s) and s not in (".", "..") and not any(c in s for c in ("/", "\\", "\0"))
+
+def _sanitize_name(s, fallback):
+    """Reduce `s` to a game-safe name [A-Za-z0-9_-].
+
+    NFKD-transliterates accents (é->e, ñ->n), drops any remaining non-ASCII
+    (e.g. CJK), collapses every other run of disallowed characters to a single
+    "_", and trims leading/trailing separators. Returns `fallback` if nothing
+    usable remains.
+    """
+    ascii_only = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode("ascii")
+    return _BAD_NAME_RE.sub("_", ascii_only).strip("_-") or fallback
+
+
+def _sanitize_basename(basename, fallback="texture"):
+    """Sanitize a texture file name, keeping a dot + ASCII-alnum extension."""
+    stem, ext = os.path.splitext(str(basename or ""))
+    stem = _sanitize_name(stem, fallback)
+    ascii_ext = unicodedata.normalize("NFKD", ext).encode("ascii", "ignore").decode("ascii")
+    ext = re.sub(r"[^A-Za-z0-9]+", "", ascii_ext).lower()
+    return f"{stem}.{ext}" if ext else stem
 
 
 def _unique_name(base, taken):
@@ -85,7 +108,8 @@ def _reexport_image_to_png(image_name, dest_path):
 def _resolve_packed_textures(norms, tmpdir):
     """Pre-pass: re-export packed/generated/non-png-jpg textures to PNG; mutate the
     texture dicts in place to look like on-disk path textures. Returns the set of
-    re-exported basenames (for the report)."""
+    re-exported textures' sanitized basenames (matches the basenames used in the
+    ZIP/report, so the copied-vs-re-exported classification holds)."""
     cache = {}      # image_name -> (png_path, basename) or None (failed)
     used = set()    # basenames already emitted into tmpdir
     reexported = set()
@@ -112,7 +136,7 @@ def _resolve_packed_textures(norms, tmpdir):
             res = cache.get(img_name)
             if res:
                 t["fileKind"], t["path"], t["basename"] = "path", res[0], res[1]
-                reexported.add(res[1])
+                reexported.add(_sanitize_basename(res[1]))
             # else: leave as-is -> mapper drops it -> reported as missing
     return reexported
 
@@ -133,43 +157,53 @@ def _write_zip(dest_path, name, save_obj, tex_bytes):
 def build_wlsave(norms, name, dest_path, skeleton_path=None):
     """Build `dest_path` (.wlsave) from NormalizedMaterial[] `norms` as collection `name`.
 
-    Returns a report dict: created[], renamed[], skipped[], texturesCopied[],
-    texturesReExported[], texturesMissing[].
+    Collection name, material names and texture basenames are sanitized to the
+    game's filename charset (see _sanitize_name). Returns a report dict: name,
+    nameOriginal, created[], renamed[], skipped[], texturesCopied[],
+    texturesReExported[], texturesMissing[], texturesRenamed[].
     """
-    if not _safe_component(name):
-        raise ValueError(f"Unsafe collection name: {name!r}")
+    name_original = name
+    name = _sanitize_name(name, "Collection")
     if skeleton_path is None:
         skeleton_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skeleton.json")
     with open(skeleton_path, encoding="utf-8") as f:
         skel = json.load(f)
 
     report = {
-        "name": name, "dest": dest_path,
+        "name": name, "nameOriginal": name_original, "dest": dest_path,
         "created": [], "renamed": [], "skipped": [],
         "texturesCopied": [], "texturesReExported": [], "texturesMissing": [],
+        "texturesRenamed": [],
     }
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_tex_")
     try:
         reexported = _resolve_packed_textures(norms, tmpdir)
 
-        # Pass 1: map, dedup names, gather unique textures by basename.
+        # Pass 1: map, sanitize + dedup names, gather unique textures by basename.
         taken, mapped, unique_tex = set(), [], {}
         for norm in norms:
             m = mapper.map_material(norm)
             if not m:
                 report["skipped"].append(norm.get("name"))
                 continue
-            final = _unique_name(m["entry"]["name"], taken)
-            if final != m["entry"]["name"]:
-                report["renamed"].append({"from": m["entry"]["name"], "to": final})
+            orig = m["entry"]["name"]
+            final = _unique_name(_sanitize_name(orig, "Material"), taken)
+            if final != orig:
+                report["renamed"].append({"from": orig, "to": final})
             taken.add(final)
             m["entry"]["name"] = final
             mapped.append(m)
             for t in m["textures"]:
-                b = t["basename"]
-                if b and _safe_component(b) and b not in unique_tex:
-                    unique_tex[b] = t["srcPath"]
+                raw = t.get("basename")
+                if not raw:
+                    continue
+                b = _sanitize_basename(raw)
+                t["basename"] = b
+                if b not in unique_tex:
+                    unique_tex[b] = t.get("srcPath")
+                    if b != raw:
+                        report["texturesRenamed"].append({"from": raw, "to": b})
 
         # Read texture bytes (dedup by basename); classify copied vs re-exported.
         tex_bytes = {}

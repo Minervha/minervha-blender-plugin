@@ -36,10 +36,6 @@ def _materials_for_scope(context):
     return introspect._materials_for_scope(context.scene.minervha_scope, _objects_for_scope(context))
 
 
-def _safe_name(name):
-    return bool(name) and name not in ('.', '..') and not any(c in name for c in ('/', '\\', '\0', ':'))
-
-
 class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     bl_idname = "minervha.export_wlsave"
     bl_label = "Export .wlsave"
@@ -48,14 +44,12 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     filter_glob: StringProperty(default="*.wlsave", options={'HIDDEN'})
 
     def invoke(self, context, event):
-        self.filepath = (context.scene.minervha_wlsave_name or "MyMaterials") + ".wlsave"
+        safe = wlsave_export._sanitize_name(context.scene.minervha_wlsave_name or "", "MyMaterials")
+        self.filepath = safe + ".wlsave"
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
         name = (context.scene.minervha_wlsave_name or "").strip()
-        if not _safe_name(name):
-            self.report({'ERROR'}, "Invalid collection name (no / \\ : characters)")
-            return {'CANCELLED'}
         norms = introspect.collect(context.scene.minervha_scope, _objects_for_scope(context))
         if not norms:
             self.report({'WARNING'}, "No materials in the selected scope")
@@ -76,14 +70,18 @@ def _popup_report(context, report):
     def draw(self, _ctx):
         layout = self.layout
         layout.label(text="Collection: " + report['name'])
+        if report.get('nameOriginal') and report['nameOriginal'] != report['name']:
+            layout.label(text="Name adjusted: %s -> %s" % (report['nameOriginal'], report['name']))
         layout.label(text="Materials created: %d" % len(report['created']))
         layout.label(text="Textures copied: %d" % len(report['texturesCopied']))
         if report['texturesReExported']:
             layout.label(text="Textures re-exported (PNG): %d" % len(report['texturesReExported']))
+        if report.get('texturesRenamed'):
+            layout.label(text="Textures renamed (safe): %d" % len(report['texturesRenamed']))
         if report['texturesMissing']:
             layout.label(text="Textures missing: %d" % len(report['texturesMissing']), icon='ERROR')
         if report['renamed']:
-            layout.label(text="Renamed (name clash): %d" % len(report['renamed']))
+            layout.label(text="Renamed (sanitized/clash): %d" % len(report['renamed']))
         if report['skipped']:
             layout.label(text="Skipped (no node tree): %d" % len(report['skipped']))
     context.window_manager.popup_menu(draw, title="Minervha — Export report", icon='CHECKMARK')

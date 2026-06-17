@@ -35,6 +35,10 @@ In the **Minervha** panel:
 **Textures**: on-disk PNG/JPG are copied as-is; packed/generated images and other formats (`.tga`, `.exr`…)
 are re-exported to PNG automatically.
 
+**Names**: the game only accepts `A-Za-z0-9_-` in file names. The collection name, material names and
+texture file names are sanitized automatically (accents transliterated — `é`→`e` — other symbols replaced
+with `_`); the export report lists anything that was renamed.
+
 ## Structure
 
 ```

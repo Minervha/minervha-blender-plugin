@@ -27,6 +27,15 @@ def _is_num(x):
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
+def _inv_scale(v):
+    """Blender Mapping Scale -> Wild Life textureTiling. Blender scales the UV
+    *coordinate* (a larger Scale repeats the texture more / makes it smaller); the
+    game's textureTiling scales the texture *size* (a larger value zooms in), so
+    the two are reciprocal. Invert per axis; 0 / non-finite -> 1 (no tiling). The
+    sign is preserved (a negative Scale mirrors, which the game also reads)."""
+    return 1.0 / v if (_is_num(v) and v != 0) else 1
+
+
 _ALPHA_RE = re.compile(r"^alpha$", re.IGNORECASE)
 
 
@@ -85,7 +94,8 @@ def map_material(norm):
                 channel_tex[ch] = tex
 
     # textureTiling / textureOffset come from the diffuse texture's mapping when
-    # present, else from any mapped texture in the material.
+    # present, else from any mapped texture in the material. textureTiling is the
+    # reciprocal of Blender's Mapping Scale (see _inv_scale).
     diffuse = channel_tex.get("diffuse")
     if diffuse and diffuse.get("mapping"):
         mapping = diffuse.get("mapping")
@@ -161,7 +171,7 @@ def map_material(norm):
         "normalMapAmplification": norm.get("normalStrength") if _is_num(norm.get("normalStrength")) else 1,
         "emissiveColor": emissive_color,
         "maskedAlphaCutoff": cutoff,
-        "textureTiling": {"x": tiling["x"], "y": tiling["y"], "z": tiling["z"]} if tiling else {"x": 1, "y": 1, "z": 1},
+        "textureTiling": {"x": _inv_scale(tiling["x"]), "y": _inv_scale(tiling["y"]), "z": _inv_scale(tiling["z"])} if tiling else {"x": 1, "y": 1, "z": 1},
         "textureOffset": {"x": offset["x"], "y": offset["y"], "z": offset["z"]} if offset else {"x": 0, "y": 0, "z": 0},
         "bIsTriplanar": False,
         "bIsTwoSided": two_sided,
