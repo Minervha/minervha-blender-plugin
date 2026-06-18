@@ -31,10 +31,10 @@ except ImportError:
 # rotation. WL imports a mesh rotated 180 deg about X — with the native axes an asymmetric model
 # came in UPSIDE DOWN *and* FACING BACKWARD — so we pre-rotate the export by the same 180 deg about
 # X to cancel it: forward='NEGATIVE_Y'/up='NEGATIVE_Z' writes vertices as (x, -y, -z). It is a proper
-# rotation (det +1), so face winding/normals stay correct (NOT a mirror), and it's consistent with the
-# prop position convention (prop_mapper negates only position.z; WL's placement flips Z, not Y). The
-# old forward='Y'/up='Z' (native/identity) is what left meshes upside-down+backward; the operator's own
-# default (NEGATIVE_Z/Y) instead lays them down.
+# rotation (det +1), so face winding/normals stay correct (NOT a mirror). This corrects WL's mesh-IMPORT
+# orientation only and is independent of the prop PLACEMENT convention (prop_mapper passes position
+# through unflipped — Blender up=+Z maps to the game's up). The old forward='Y'/up='Z' (native/identity)
+# is what left meshes upside-down+backward; the operator's own default (NEGATIVE_Z/Y) instead lays them down.
 FORWARD_AXIS = "NEGATIVE_Y"
 UP_AXIS = "NEGATIVE_Z"
 # Scale is NOT hardcoded here: the caller passes one "world" scale as `global_scale` (= 100 x scene Unit
