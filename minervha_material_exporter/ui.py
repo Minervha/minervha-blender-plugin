@@ -6,14 +6,18 @@ materials; Scene mode also exports each object's geometry (UserMesh props), tran
 and hierarchy (Group props). Opens a file-save dialog, then shows a report.
 """
 
+import os
+import shutil
+import tempfile
+
 import bpy
 from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper
 
 try:
-    from . import introspect, wlsave_export, scene_introspect, obj_export   # packaged extension
+    from . import introspect, wlsave_export, scene_introspect, obj_export, bake, mapper   # packaged extension
 except ImportError:                           # dev / sys.path import (live MCP)
-    import introspect, wlsave_export, scene_introspect, obj_export
+    import introspect, wlsave_export, scene_introspect, obj_export, bake, mapper
 
 
 # Blender works in metres; Wild Life (Unreal) world unit is the centimetre, so a Blender scene
@@ -55,6 +59,78 @@ MAX_RES_ITEMS = [
     ('1024', "1024 px", "Downscale textures whose longest side exceeds 1024 px"),
     ('512', "512 px", "Downscale textures whose longest side exceeds 512 px"),
 ]
+
+
+BAKE_RES_ITEMS = [
+    ('512', "512 px", "Bake flagged channels at 512x512"),
+    ('1024', "1024 px", "Bake flagged channels at 1024x1024"),
+    ('2048', "2048 px", "Bake flagged channels at 2048x2048"),
+    ('4096', "4096 px", "Bake flagged channels at 4096x4096"),
+]
+
+
+# WL channel -> the Blender Principled slot a baked texture should occupy.
+_BAKE_CH_SLOT = {"diffuse": "Base Color", "roughness": "Roughness", "metallic": "Metallic",
+                 "normal": "Normal", "emissive": "Emission Color"}
+
+
+def _make_material_baker(objs, tex_dir, resolution):
+    """Build the Scene-mode bake pre-pass passed to wlsave_export.build_scene_wlsave.
+
+    Bakes the channels mapper flagged as `bakeCandidates` (procedural / multi-texture /
+    divergent-UV) onto a representative in-scope mesh that uses the material, writing PNGs into
+    `tex_dir` and injecting them into `norms` as baked path textures (so the rest of the pipeline
+    treats them as ordinary on-disk textures and the mapper resets tiling to identity).
+
+    Non-destructive: only objects that ALREADY have a UV map are baked (a UV-space bake on a no-UV
+    mesh is meaningless, and auto-unwrapping would mutate the user's mesh) — no-UV materials are
+    left to the Phase-1 warns. One CYCLES swap for the whole batch, restored on exit."""
+    mat_obj = {}
+    for o in objs:
+        if getattr(o, "type", None) != 'MESH' or not o.data.uv_layers:
+            continue
+        for slot in o.material_slots:
+            if slot.material and slot.material.name not in mat_obj:
+                mat_obj[slot.material.name] = o
+
+    def baker(norms):
+        baked = []
+        todo = []
+        for norm in norms:
+            if norm.get("skipped"):
+                continue
+            m = mapper.map_material(norm)
+            if not m:
+                continue
+            chans = []
+            for bc in m["report"].get("bakeCandidates", []):
+                ch = bc.get("channel")
+                if ch in _BAKE_CH_SLOT and ch not in chans:
+                    chans.append(ch)
+            mat = bpy.data.materials.get(norm.get("name"))
+            obj = mat_obj.get(norm.get("name"))   # a UV-bearing consumer of this material
+            if chans and mat is not None and obj is not None:
+                todo.append((norm, mat, obj, chans))
+        if not todo or not bake.can_bake():
+            return baked
+        with bake.bake_environment():
+            for norm, mat, obj, chans in todo:
+                for ch in chans:
+                    safe = wlsave_export._sanitize_name(mat.name, "mat")
+                    out = os.path.join(tex_dir, "%s_%s.png" % (safe, ch))
+                    path = bake.bake_channel(obj, mat, ch, resolution, out)
+                    if not path:
+                        continue
+                    slot = _BAKE_CH_SLOT[ch]
+                    norm["textures"] = [t for t in (norm.get("textures") or [])
+                                        if slot not in (t.get("slots") or [])]
+                    norm["textures"].insert(0, {
+                        "name": "%s_%s" % (mat.name, ch), "fileKind": "path",
+                        "path": path, "basename": os.path.basename(path),
+                        "slots": [slot], "mapping": None, "baked": True})
+                    baked.append([mat.name, ch])
+        return baked
+    return baker
 
 
 def _objects_for_scope(context):
@@ -149,13 +225,24 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         world_scale = WL_UNITS_PER_METRE * unit
         exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(objs),
                                                 global_scale=world_scale)
-        report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
-                                                  position_scale=world_scale, level=level,
-                                                  tex_opts=self._tex_opts(context))
-        self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV)" % (
+        # Scene-mode bake pre-pass (opt-in): flatten flagged channels onto a UV-bearing consumer mesh.
+        bake_tmp, baker = None, None
+        if context.scene.minervha_bake:
+            bake_tmp = tempfile.mkdtemp(prefix="wlsave_bake_")
+            baker = _make_material_baker(objs, bake_tmp, int(context.scene.minervha_bake_res))
+        try:
+            report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
+                                                      position_scale=world_scale, level=level,
+                                                      tex_opts=self._tex_opts(context),
+                                                      material_baker=baker)
+        finally:
+            if bake_tmp:
+                shutil.rmtree(bake_tmp, ignore_errors=True)
+        baked_n = len(report.get('materialsBaked') or [])
+        self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV, %d baked)" % (
             self.filepath, ("map '%s'" % level) if level else "collection",
             len(report['objectsExported']), len(report['meshesWritten']),
-            len(report['created']), len(report['noUv'])))
+            len(report['created']), len(report['noUv']), baked_n))
         self._popup(context, report)
         return {'FINISHED'}
 
@@ -192,8 +279,11 @@ def _popup_report(context, report):
             layout.label(text="Meshes written: %d" % len(report['meshesWritten']))
             if report['noUv']:
                 layout.label(text="Objects without UVs: %d" % len(report['noUv']), icon='ERROR')
+            if report.get('materialsBaked'):
+                layout.label(text="Channels baked: %d" % len(report['materialsBaked']), icon='RENDER_STILL')
             if report['proceduralMaterials']:
-                layout.label(text="Procedural materials (bake manually): %d" % len(report['proceduralMaterials']), icon='ERROR')
+                icon = 'INFO' if report.get('materialsBaked') else 'ERROR'
+                layout.label(text="Procedural materials: %d (enable Bake)" % len(report['proceduralMaterials']), icon=icon)
             if report.get('meshExportFailed'):
                 layout.label(text="Meshes failed to export: %d" % len(report['meshExportFailed']), icon='ERROR')
     context.window_manager.popup_menu(draw, title="Minervha — Export report", icon='CHECKMARK')
@@ -231,7 +321,7 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
             note = layout.box()
             note.label(text="Scene export limits:", icon='INFO')
             note.label(text="• meshes need UVs")
-            note.label(text="• procedural textures: bake first")
+            note.label(text="• procedural textures: enable Bake below")
             note.label(text="• verify transforms in-game")
 
         tex = layout.box()
@@ -240,6 +330,11 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         if scene.minervha_tex_prefer_jpg:
             tex.prop(scene, "minervha_tex_jpg_quality")
         tex.prop(scene, "minervha_tex_max_res", text="Max resolution")
+        if scene_mode:
+            tex.separator()
+            tex.prop(scene, "minervha_bake")
+            if scene.minervha_bake:
+                tex.prop(scene, "minervha_bake_res", text="Bake resolution")
 
         layout.separator()
         box = layout.box()
@@ -267,6 +362,14 @@ def register():
     bpy.types.Scene.minervha_tex_max_res = EnumProperty(
         name="Max Resolution", items=MAX_RES_ITEMS, default='NONE',
         description="Downscale textures whose longest side exceeds this size (keeps aspect ratio)")
+    bpy.types.Scene.minervha_bake = BoolProperty(
+        name="Bake procedural / complex shading", default=False,
+        description="Scene mode: bake the channels flagged as bakeCandidates (procedural, "
+                    "multi-texture, divergent-UV) onto a UV-bearing mesh, into flat PBR textures. "
+                    "Uses Cycles; only objects that already have UVs are baked")
+    bpy.types.Scene.minervha_bake_res = EnumProperty(
+        name="Bake Resolution", items=BAKE_RES_ITEMS, default='2048',
+        description="Resolution of the baked PBR textures")
     for cls in _classes:
         bpy.utils.register_class(cls)
 
@@ -276,6 +379,7 @@ def unregister():
         bpy.utils.unregister_class(cls)
     for prop in ("minervha_export_mode", "minervha_export_target", "minervha_scope",
                  "minervha_collection", "minervha_wlsave_name",
-                 "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res"):
+                 "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res",
+                 "minervha_bake", "minervha_bake_res"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

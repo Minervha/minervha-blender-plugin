@@ -367,7 +367,7 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None):
 
 
 def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
-                       position_scale=1.0, level="", tex_opts=None):
+                       position_scale=1.0, level="", tex_opts=None, material_baker=None):
     """Build a full-scene `.wlsave`: customMaterials + props (UserMesh/Group) + Models/ OBJs.
 
     `norms`        — NormalizedMaterial[] for the materials used by the in-scope objects.
@@ -383,11 +383,17 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                      installs under MySaves/<level>/. Only the JSON field changes — the ZIP layout
                      is identical either way.
     `tex_opts`     — texture pre-pass options (or None): {prefer_jpg, jpg_quality, max_res}.
+    `material_baker` — optional callable `(norms) -> baked[]`, run BEFORE mapping. Bakes the
+                     channels mapper flagged as `bakeCandidates` (procedural / multi-texture /
+                     divergent-UV) into PNGs and injects them into `norms` as baked path textures,
+                     so the rest of the pipeline treats them as ordinary on-disk textures. bpy-side
+                     and Scene-mode only (baking needs an object+UV); the UI builds it, tests pass
+                     None. Returns the list recorded as report["materialsBaked"].
 
     One OBJ per unique mesh datablock (instances reuse the same MeshPath). Material names are
     namespaced; each prop's CustomMaterial{i} references them by that exact name. Returns the
     materials report extended with: objectsExported[], objectsSkipped[], noUv[],
-    proceduralMaterials[], meshesWritten[], materialNamespaced, level.
+    proceduralMaterials[], meshesWritten[], materialsBaked[], materialNamespaced, level.
     """
     name_original = name
     name = _sanitize_name(name, "Collection")
@@ -395,10 +401,14 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
     report = _new_report(name, name_original, dest_path)
     report.update({"objectsExported": [], "objectsSkipped": [], "noUv": [],
                    "proceduralMaterials": [], "meshesWritten": [], "meshExportFailed": [],
-                   "materialNamespaced": True, "level": level})
+                   "materialsBaked": [], "materialNamespaced": True, "level": level})
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_scene_")
     try:
+        # Bake pre-pass (Scene mode only): flatten flagged channels into PNGs injected into `norms`
+        # BEFORE mapping, so _process_textures/mapper see them as ordinary path textures.
+        if material_baker is not None:
+            report["materialsBaked"] = material_baker(norms) or []
         entries, tex_bytes, material_names = _build_material_entries(norms, name, report, tmpdir, tex_opts)
 
         # One OBJ per unique mesh datablock (instances reuse it).

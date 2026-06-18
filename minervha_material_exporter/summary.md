@@ -30,8 +30,17 @@ PBR scalars (Value/RGB-driven Base Color/Metallic/Roughness/Emission), threads M
 `projectionMapped`/`consumedByNoUvObject`; `scene_introspect.py` drops the dead `TEX_MUSGRAVE`. The
 `bakeCandidates` are the trigger Phase 2 (opt-in baking) will consume. Plan + chunks:
 [`../docs/plans/features/shading-compatibility/plan.md`](../docs/plans/features/shading-compatibility/plan.md).
-Phase 2 chunk-05 (`bake.py`) is done + validated live; its pipeline/UI integration (chunk-06) and Phase 3
-polish are pending.
+
+**Shading compatibility — Phase 2 (baking, opt-in, validated live Blender 5.1.2).** `introspect.py` flags
+**`dynamicChannels`** (a channel driven by a non-static node graph — Noise/Math/Mix — with no exportable
+image, the procedural trigger); `mapper.py` turns those into `bakeCandidate{reason:"procedural"}` and resets
+`textureTiling` to identity when a channel's texture is `baked`. `bake.py` (net-new) flattens flagged
+channels to PNGs via Cycles. `wlsave_export.build_scene_wlsave` gains a `material_baker` hook (run before
+mapping; **Scene mode only** — baking needs an object+UV); `ui.py` adds the **Bake** opt-in toggle + Bake
+resolution (Scene mode), builds the baker over the in-scope objects (only meshes that *already* have UVs, to
+stay non-destructive), and reports baked-channel counts. End-to-end live: a Noise→Base Color/Roughness
+material bakes 2 PNGs into the `.wlsave`, channel paths filled, tiling identity, render state restored.
+Phase 3 polish (green-flip toggle, UV-bounds tiling, lossy report) pending.
 
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures

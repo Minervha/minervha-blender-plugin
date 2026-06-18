@@ -127,6 +127,13 @@ def map_material(norm):
                     f"{ch}: kept '{channel_tex[ch].get('name')}', dropped '{tex.get('name')}' — bake to merge")
                 _bake_candidate(ch, "multi-texture")
 
+    # Procedural / graph-driven channels (no image texture, no static value — Noise, math,
+    # mix, ...) are flagged for baking. introspect resolves which channels these are.
+    for ch in (norm.get("dynamicChannels") or []):
+        if ch not in channel_tex:
+            report["notes"].append(f"{ch}: driven by a procedural / node graph — bake to flatten")
+            _bake_candidate(ch, "procedural")
+
     # ORM/MRAO: the same source image landing in two channels (e.g. a Separate Color
     # feeding metallic + roughness from one packed map) is not independent. First-wins
     # kept it in each channel as-is; flag it so the user can bake to split the channels.
@@ -147,7 +154,9 @@ def map_material(norm):
     # present, else from any mapped texture in the material. textureTiling is the
     # reciprocal of Blender's Mapping Scale (see _inv_scale).
     diffuse = channel_tex.get("diffuse")
-    if diffuse and diffuse.get("mapping"):
+    if diffuse and diffuse.get("baked"):
+        mapping = None              # tiling/rotation are baked into the diffuse pixels -> identity
+    elif diffuse and diffuse.get("mapping"):
         mapping = diffuse.get("mapping")
     else:
         mapping = None

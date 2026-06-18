@@ -2381,5 +2381,141 @@
         }
       ]
     }
+  },
+  {
+    "entry": {
+      "name": "ProceduralDiffuse",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "ProceduralDiffuse",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "diffuse: driven by a procedural / node graph — bake to flatten"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "diffuse",
+          "reason": "procedural"
+        }
+      ]
+    }
+  },
+  {
+    "entry": {
+      "name": "BakedDiffuse",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/bake/Mat_diffuse.png",
+        "basename": "Mat_diffuse.png"
+      },
+      {
+        "channel": "normal",
+        "field": "normalTexturePath",
+        "srcPath": "C:/tex/BrickNormal.png",
+        "basename": "BrickNormal.png"
+      }
+    ],
+    "report": {
+      "name": "BakedDiffuse",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [],
+      "bakeCandidates": []
+    }
   }
 ]

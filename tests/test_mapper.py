@@ -45,6 +45,8 @@ _SEMANTIC = {
     "RotatedMapping":        {"bake": [("diffuse", "rotation")]},
     "PackedORM":             {"bake": [("roughness", "orm-packed")]},
     "UdimDiffuse":           {"bake": [("diffuse", "udim")]},
+    "ProceduralDiffuse":     {"bake": [("diffuse", "procedural")]},
+    "BakedDiffuse":          {"tiling_identity": True},
 }
 
 
@@ -62,6 +64,8 @@ def run_semantic():
         entry, report = r["entry"], r["report"]
         if "triplanar" in checks and entry["bIsTriplanar"] is not checks["triplanar"]:
             fails.append((name, f"bIsTriplanar={entry['bIsTriplanar']!r} expected {checks['triplanar']!r}"))
+        if checks.get("tiling_identity") and entry["textureTiling"] != {"x": 1, "y": 1, "z": 1}:
+            fails.append((name, f"textureTiling={entry['textureTiling']} expected identity (baked diffuse)"))
         for ch, reason in checks.get("bake", []):
             if {"channel": ch, "reason": reason} not in report["bakeCandidates"]:
                 fails.append((name, f"missing bakeCandidate ({ch},{reason}); have {report['bakeCandidates']}"))

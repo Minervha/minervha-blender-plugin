@@ -201,6 +201,33 @@ def normalize_material(mat):
     if raytrace is None:
         raytrace = getattr(mat, "use_screen_refraction", None)
 
+    # Channels driven by a non-static node graph with NO exportable image texture (procedural
+    # Noise/Voronoi, Math, Mix, ColorRamp, ...) -> flag for baking (mapper turns these into
+    # bakeCandidates). A channel satisfied by a single image texture (its slot appears in
+    # tex_list) or by a resolved constant is NOT flagged.
+    slot_set = {s for t in tex_list for s in (t.get("slots") or [])}
+
+    def _input_linked(input_name):
+        return any((p.inputs.get(input_name) is not None and p.inputs.get(input_name).is_linked)
+                   for p, _ in principled)
+
+    dynamic_channels = []
+    for input_name, ch, static_val in (("Base Color", "diffuse", base_color),
+                                       ("Metallic", "metallic", metallic),
+                                       ("Roughness", "roughness", roughness),
+                                       ("Emission Color", "emissive", emission_color)):
+        if static_val is not None or input_name in slot_set:
+            continue
+        if ch == "emissive" and isinstance(emission_strength, (int, float)) and emission_strength <= 0:
+            continue  # no glow -> baking a black emissive is pointless
+        linked = _input_linked(input_name)
+        if not linked and input_name == "Emission Color":
+            linked = _input_linked("Emission")
+        if linked:
+            dynamic_channels.append(ch)
+    if "Normal" not in slot_set and _input_linked("Normal"):
+        dynamic_channels.append("normal")
+
     return {
         "name": mat.name, "skipped": False,
         "objects": bsdf_trace.objects_using_material(mat),
@@ -219,6 +246,7 @@ def normalize_material(mat):
         "maskedFacMix": walk["maskedFacMix"],
         "projectionMapped": projection_mapped,
         "consumedByNoUvObject": False,  # set by collect() once object context is known
+        "dynamicChannels": dynamic_channels,
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,
     }
 

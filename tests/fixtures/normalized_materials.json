@@ -478,5 +478,30 @@
     "textures": [
       { "name": "UdimSheet", "slots": ["Base Color"], "fileKind": "udim", "path": "C:/tex/sheet.<UDIM>.png", "basename": "sheet.<UDIM>.png", "mapping": null }
     ]
+  },
+  {
+    "name": "ProceduralDiffuse",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "dynamicChannels": ["diffuse"],
+    "textures": []
+  },
+  {
+    "name": "BakedDiffuse",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "Mat_diffuse", "slots": ["Base Color"], "fileKind": "path", "path": "C:/bake/Mat_diffuse.png", "basename": "Mat_diffuse.png", "mapping": null, "baked": true },
+      { "name": "BrickNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/BrickNormal.png", "basename": "BrickNormal.png",
+        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 2, "y": 2, "z": 1 } } }
+    ]
   }
 ]
