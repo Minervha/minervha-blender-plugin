@@ -1,35 +1,31 @@
-"""Unit tests for prop_mapper.blender_to_wl_transform.
+"""Tests for prop_mapper.blender_to_wl_transform — now a thin caller of wl_transform.
 
-Pins the Blender -> Wild Life transform convention (calibration item #2, chunk-06).
-RESOLVED in-game: position is scaled by `position_scale` (= 100 x Unit Scale, metres
--> WL cm) and passes through UNFLIPPED on every axis (Blender up=+Z -> the game's up,
-sign preserved). STILL open: the rotation axis/sign permutation. A calibration change
-shows up as a deliberate, reviewed diff here (and in the golden) rather than a silent shift.
+The coordinate math (change of basis, rotation conjugation, scale permutation) is pinned in
+tests/test_wl_transform.py. Here we only pin the prop_mapper contract: it delegates to
+wl_transform with WL_BASIS, threads position_scale as the scale_factor, and emits the golden
+key order.
 
 Pure Python (no bpy). Run:  python tests/test_transform.py  (or pytest)
 """
 
-import math
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "minervha_material_exporter"))
 
-import prop_mapper  # noqa: E402
+import prop_mapper      # noqa: E402
+import wl_transform     # noqa: E402
 
 
-def _approx(a, b, tol=1e-9):
-    return abs(a - b) <= tol
-
-
-def test_identity():
-    t = prop_mapper.blender_to_wl_transform((0, 0, 0), (0, 0, 0), "XYZ", (1, 1, 1))
-    assert t == {
-        "position": {"x": 0, "y": 0, "z": 0},
-        "rotation": {"pitch": 0, "yaw": 0, "roll": 0},
-        "scale": {"x": 1, "y": 1, "z": 1},
-    }
+def test_delegates_to_wl_transform():
+    for loc, eul, scl, ps in [
+        ((1.5, -2.0, 3.0), (0, 0, 0), (1, 1, 1), 1.0),
+        ((0, 0, 5), (0.3, 0.0, 1.2), (2, 0.5, 9), 100.0),
+    ]:
+        got = prop_mapper.blender_to_wl_transform(loc, eul, "XYZ", scl, position_scale=ps)
+        exp = wl_transform.object_transform(loc, eul, "XYZ", scl, basis=wl_transform.WL_BASIS, scale_factor=ps)
+        assert got == exp, (loc, eul, scl, ps)
 
 
 def test_key_order():
@@ -40,52 +36,19 @@ def test_key_order():
     assert list(t["scale"]) == ["x", "y", "z"]
 
 
-def test_translation():
-    # x,y,z all pass through (Blender up=+Z maps to the game's up, sign preserved).
-    t = prop_mapper.blender_to_wl_transform((1.5, -2.0, 3.0), (0, 0, 0), "XYZ", (1, 1, 1))
-    assert t["position"] == {"x": 1.5, "y": -2.0, "z": 3.0}
+def test_seed_up_axis_and_scale_factor():
+    # The headline behavior, tied to WL_BASIS: Blender up (+Z) -> game up (+Y), scaled by position_scale.
+    t = prop_mapper.blender_to_wl_transform((0, 0, 1), (0, 0, 0), "XYZ", (1, 1, 1), position_scale=100.0)
+    assert t["position"] == {"x": 0, "y": 100.0, "z": 0}
 
 
-def test_z_axis_passthrough():
-    up = prop_mapper.blender_to_wl_transform((0, 0, 5.0), (0, 0, 0), "XYZ", (1, 1, 1))
-    assert up["position"]["z"] == 5.0
-    down = prop_mapper.blender_to_wl_transform((0, 0, -5.0), (0, 0, 0), "XYZ", (1, 1, 1))
-    assert down["position"]["z"] == -5.0
-
-
-def test_zero_z_is_not_negative_zero():
-    # A z=0 prop must serialise as "0.0", never "-0.0".
-    t = prop_mapper.blender_to_wl_transform((0.0, 0.0, 0.0), (0, 0, 0), "XYZ", (1, 1, 1))
-    assert repr(t["position"]["z"]) == "0.0"
-
-
-def test_rotation_radians_to_degrees():
-    t = prop_mapper.blender_to_wl_transform((0, 0, 0), (math.pi / 2, 0, math.pi), "XYZ", (1, 1, 1))
-    assert _approx(t["rotation"]["pitch"], 90.0)
-    assert _approx(t["rotation"]["yaw"], 0.0)
-    assert _approx(t["rotation"]["roll"], 180.0)
-
-
-def test_scale_passthrough_incl_negative():
-    t = prop_mapper.blender_to_wl_transform((0, 0, 0), (0, 0, 0), "XYZ", (2.0, 0.5, -1.0))
-    assert t["scale"] == {"x": 2.0, "y": 0.5, "z": -1.0}
-
-
-def test_position_scale_factor():
-    # world scale = 100 x Unit Scale (metres -> WL cm); default Unit Scale 1.0 -> factor 100,
-    # applied to position only (all axes pass through, sign preserved).
-    t = prop_mapper.blender_to_wl_transform((1.0, -2.0, 3.0), (0, 0, 0), "XYZ", (1, 1, 1), position_scale=100.0)
-    assert t["position"] == {"x": 100.0, "y": -200.0, "z": 300.0}
-    assert t["scale"] == {"x": 1, "y": 1, "z": 1}  # prop scale is unitless, untouched by world scale
+def test_identity_rotation_is_zero():
+    t = prop_mapper.blender_to_wl_transform((0, 0, 0), (0, 0, 0), "XYZ", (1, 1, 1))
+    assert t["rotation"] == {"pitch": 0.0, "yaw": 0.0, "roll": 0.0}
 
 
 def run():
-    tests = [
-        test_identity, test_key_order, test_translation,
-        test_z_axis_passthrough, test_zero_z_is_not_negative_zero,
-        test_rotation_radians_to_degrees, test_scale_passthrough_incl_negative,
-        test_position_scale_factor,
-    ]
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = []
     for t in tests:
         try:

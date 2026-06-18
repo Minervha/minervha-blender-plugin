@@ -27,20 +27,50 @@ try:
 except ImportError:
     import wlsave_export
 
-# Calibrated in-game (chunk-06): the ORIENTATION fix lives here (on the OBJ), not on the prop
-# rotation. WL imports a mesh rotated 180 deg about X — with the native axes an asymmetric model
-# came in UPSIDE DOWN *and* FACING BACKWARD — so we pre-rotate the export by the same 180 deg about
-# X to cancel it: forward='NEGATIVE_Y'/up='NEGATIVE_Z' writes vertices as (x, -y, -z). It is a proper
-# rotation (det +1), so face winding/normals stay correct (NOT a mirror). This corrects WL's mesh-IMPORT
-# orientation only and is independent of the prop PLACEMENT convention (prop_mapper passes position
-# through unflipped — Blender up=+Z maps to the game's up). The old forward='Y'/up='Z' (native/identity)
-# is what left meshes upside-down+backward; the operator's own default (NEGATIVE_Z/Y) instead lays them down.
-FORWARD_AXIS = "NEGATIVE_Y"
-UP_AXIS = "NEGATIVE_Z"
+try:
+    from . import wl_transform      # the single coordinate-convention locus
+except ImportError:
+    import wl_transform
+
+# Orientation is NO LONGER hardcoded here. The geometry matrix baked into the OBJ is
+# wl_transform.geom_matrix() (= B_geom = C_objᵀ·B, the OBJ-import-aware change of basis), and the
+# operator's own forward/up are left at their identity ('Y'/'Z') so wl_transform stays the single locus.
+# A reflective basis (geom_is_mirrored) means the in-world geometry is mirrored -> reverse face winding
+# and skip writing normals (the reflected vn would point inward; WL recomputes from the corrected winding).
+_OBJ_FORWARD = "Y"   # operator identity — MUST stay 'Y'/'Z' (a non-identity value composes with B_geom)
+_OBJ_UP = "Z"
 # Scale is NOT hardcoded here: the caller passes one "world" scale as `global_scale` (= 100 x scene Unit
 # Scale, the Blender-metres -> WL-centimetres factor) and it is applied UNIFORMLY to geometry here AND to
 # prop positions in prop_mapper (never per-object). wm.obj_export does not honour scene unit scale itself
 # (no use_scene_unit option), so the caller passes the factor explicitly.
+
+
+def reverse_obj_winding(obj_text):
+    """Reverse the vertex order of every `f ` face line (keeping each v/vt/vn triplet intact), so a
+    mirrored (det < 0) bake keeps faces CCW / outward. Non-face lines are untouched. Pure text."""
+    out = []
+    for line in obj_text.splitlines(keepends=True):
+        if line.startswith("f "):
+            body = line.rstrip("\n")
+            nl = line[len(body):]
+            verts = body.split()[1:]
+            out.append("f " + " ".join(reversed(verts)) + nl)
+        else:
+            out.append(line)
+    return "".join(out)
+
+
+def _reverse_winding_file(obj_path):
+    """Rewrite an OBJ in place with reversed face winding. Best-effort (an IO error must not fail export)."""
+    try:
+        with open(obj_path, encoding="utf-8") as f:
+            text = f.read()
+        new = reverse_obj_winding(text)
+        if new != text:
+            with open(obj_path, "w", encoding="utf-8") as f:
+                f.write(new)
+    except Exception:
+        pass
 
 
 def _usemtl_order(obj_text):
@@ -138,21 +168,26 @@ def export_mesh_obj(src_object, dest_dir, used_basenames, write_mtl=True, global
         bpy.ops.object.select_all(action="DESELECT")
         src_object.select_set(True)
         view_layer.objects.active = src_object
-        # world == Identity -> the exporter writes mesh-local coords (it bakes the world matrix,
-        # and has no "skip object transform" option). Flush the depsgraph so the eval sees it.
-        src_object.matrix_world = mathutils.Matrix.Identity(4)
+        # The exporter bakes the world matrix (no "skip object transform" option), so set world =
+        # geom_matrix() = B_geom: the geometry change of basis, in mesh-LOCAL space (no translation —
+        # placement stays on the prop). Flush the depsgraph so the eval sees it.
+        mirrored = wl_transform.geom_is_mirrored()
+        src_object.matrix_world = mathutils.Matrix(wl_transform.geom_matrix())
         view_layer.update()
         bpy.ops.wm.obj_export(
             filepath=dest,
             export_selected_objects=True,
             apply_modifiers=True,
             export_uv=True,
-            export_normals=True,
+            export_normals=not mirrored,   # a reflected vn points inward; let WL recompute from winding
             export_materials=write_mtl,
-            forward_axis=FORWARD_AXIS,
-            up_axis=UP_AXIS,
+            forward_axis=_OBJ_FORWARD,     # identity — orientation lives entirely in geom_matrix()
+            up_axis=_OBJ_UP,
             global_scale=global_scale,
         )
+        if mirrored:
+            # det(B) < 0 -> the bake mirrored the geometry; restore CCW/outward faces.
+            _reverse_winding_file(dest)
         if write_mtl:
             # wm.obj_export writes the .mtl alphabetically; realign it to slot order so
             # WL maps each section to the right CustomMaterial (see reorder_mtl_blocks).

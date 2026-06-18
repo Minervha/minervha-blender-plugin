@@ -14,7 +14,11 @@ a regression snapshot (golden via tests/_gen_golden_props.py), like mapper.py.
 """
 
 import hashlib
-import math
+
+try:
+    from . import wl_transform       # packaged extension
+except ImportError:                  # dev / sys.path import (tests, live MCP)
+    import wl_transform
 
 # --- Calibration item #1 (chunk-06, RESOLVED in-game): Blender material slot i ->
 # CustomMaterial{i+OFFSET}. CustomMaterial0 is the prop's built-in/base slot — present in-game
@@ -22,20 +26,10 @@ import math
 # at CustomMaterial1. Hence OFFSET = 1 and CustomMaterial0 is emitted empty.
 OFFSET = 1
 
-# --- Calibration item #2 (chunk-06): Blender -> WL transform convention.
-#  * Scale (RESOLVED in-game): position is multiplied by `position_scale` = world scale =
-#    100 x scene Unit Scale (Blender metres -> Wild Life/Unreal centimetres). The caller passes the
-#    same factor to obj_export's global_scale so geometry and positions share one factor. At the
-#    default Unit Scale (1.0) this is x100 — which is why an unconverted scene imported 100x too small.
-#  * Z (RESOLVED in-game): position passes through UNFLIPPED on every axis — Blender up (+Z) maps to
-#    the game's up axis, sign preserved (a prop at Blender Z=1 lands at +1 in-game, not -1). The mesh
-#    ORIENTATION fix is geometry-only and lives in obj_export (a 180-deg-about-X on the OBJ that cancels
-#    WL's mesh-import rotation); it is independent of this placement convention. An earlier position.z
-#    NEGATION was a leftover from when the mesh still imported upside-down — once the orientation was
-#    fixed on the geometry, that negation only flipped placement vertically, so it was removed.
-#  * Rotation: per-axis euler->degrees (pitch=rotX, yaw=rotY, roll=rotZ). The exact Blender-axis ->
-#    WL pitch/yaw/roll permutation + signs is STILL being calibrated in-game (kept on the prop by
-#    decision); a controlled single-axis test fixes it. Changing it affects test_transform + golden.
+# --- Calibration item #2: the Blender -> WL coordinate convention (position/rotation/scale + the
+# geometry matrix) now lives entirely in wl_transform.WL_BASIS — one change of basis applied
+# consistently. blender_to_wl_transform is a thin caller; position_scale = world scale factor
+# (100 x scene Unit Scale, metres -> WL cm), the same factor passed to obj_export's global_scale.
 _ROOT_GUID = "0" * 32
 
 
@@ -54,24 +48,14 @@ def root_guid():
 
 
 def blender_to_wl_transform(location, rotation_euler, rotation_order, scale, position_scale=1.0):
-    """Local Blender transform -> WL {position, rotation(deg), scale}.
+    """Local Blender transform -> WL {position, rotation(deg), scale}. Thin caller of wl_transform.
 
     location=(x,y,z) metres, rotation_euler=(rx,ry,rz) radians, rotation_order e.g. "XYZ",
     scale=(sx,sy,sz), position_scale = world scale factor (100 x scene Unit Scale, metres -> WL cm).
-    Position passes through unflipped on every axis (Blender up=+Z -> the game's up, sign preserved).
-    Keys are emitted in the game's order (x,y,z / pitch,yaw,roll) for golden stability. This is the
-    SINGLE locus of the axis/sign convention (calibration #2); `rotation_order` is threaded for the
-    order-aware conversion the calibration will install."""
-    lx, ly, lz = location
-    rx, ry, rz = rotation_euler
-    sx, sy, sz = scale
-    # `... or 0.0` normalises a signed zero back to +0.0 so a z=0 prop stays "0.0", not "-0.0".
-    pos_z = lz * position_scale or 0.0
-    return {
-        "position": {"x": lx * position_scale, "y": ly * position_scale, "z": pos_z},
-        "rotation": {"pitch": math.degrees(rx), "yaw": math.degrees(ry), "roll": math.degrees(rz)},
-        "scale": {"x": sx, "y": sy, "z": sz},
-    }
+    The axis/sign/handedness convention is wl_transform.WL_BASIS (the single locus); position_scale is
+    its scale_factor (applied to position only)."""
+    return wl_transform.object_transform(location, rotation_euler, rotation_order, scale,
+                                         basis=wl_transform.WL_BASIS, scale_factor=position_scale)
 
 
 def _event(event_id):
