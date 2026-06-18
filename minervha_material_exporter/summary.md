@@ -46,8 +46,8 @@ export toggle: `ui.py` adds **Flip normal green (DirectX)** (default True), stam
 via `_annotate_flip`, and `mapper.py` reads `norm.get("flipGreen", True)`. `introspect.py` flags
 **`lossyFeatures`** (anisotropy / coat / sheen — Principled inputs the flat struct cannot carry) which
 `mapper.py` surfaces as "no WL equivalent, dropped" notes. **Deferred:** UV-bounds tiling inference (a fragile
-niche heuristic — see plan chunk-08). The MASTER addendum (chunk-09) is flagged for owner sign-off (not yet
-applied).
+niche heuristic — see plan chunk-08). Docs (chunk-09): MASTER addendum, schema note and this summary updated
+(owner-approved 2026-06-18).
 
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
