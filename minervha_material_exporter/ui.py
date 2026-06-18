@@ -178,7 +178,7 @@ def _popup_report(context, report):
 
 
 class MINERVHA_PT_exporter(bpy.types.Panel):
-    bl_label = "Material Exporter"
+    bl_label = "Exporter"
     bl_idname = "MINERVHA_PT_exporter"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"

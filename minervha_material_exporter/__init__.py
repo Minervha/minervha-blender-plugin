@@ -1,4 +1,4 @@
-"""Minervha Material Exporter — Blender 4.2+ extension.
+"""Minervha Exporter — Blender 4.2+ extension.
 
 Exports a Blender scene's materials to Wild Life as a self-contained `.wlsave`
 collection bundle (JSON + textures), installable via Minervha Studio.

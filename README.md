@@ -1,4 +1,4 @@
-# Minervha Blender Plugin — Material Exporter
+# Minervha Exporter (Blender to Wild Life)
 
 Blender extension that exports a Blender scene's materials to **Wild Life** as a self-contained
 **collection bundle** (`.wlsave`) — the collection's JSON plus all its textures, ready to install via
