@@ -386,5 +386,97 @@
     "normalStrength": 1,
     "shaderTypes": ["BSDF_PRINCIPLED", "EMISSION"],
     "textures": []
+  },
+  {
+    "name": "TriplanarProjection",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "projectionMapped": true,
+    "textures": [
+      { "name": "RockDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/RockDiff.png", "basename": "RockDiff.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "TriplanarNoUV",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "consumedByNoUvObject": true,
+    "textures": [
+      { "name": "WallDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/WallDiff.png", "basename": "WallDiff.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "MultiTexBaseColor",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "BaseRock", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/BaseRock.png", "basename": "BaseRock.png", "mapping": null },
+      { "name": "MossOverlay", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/MossOverlay.png", "basename": "MossOverlay.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "DivergentNormalTiling",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "BrickDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/BrickDiff.png", "basename": "BrickDiff.png",
+        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } } },
+      { "name": "BrickDetailNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/BrickDetailNormal.png", "basename": "BrickDetailNormal.png",
+        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 4, "y": 4, "z": 1 } } }
+    ]
+  },
+  {
+    "name": "RotatedMapping",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "TileDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/TileDiff.png", "basename": "TileDiff.png",
+        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 }, "rot": { "x": 0, "y": 0, "z": 45 } } }
+    ]
+  },
+  {
+    "name": "PackedORM",
+    "skipped": false,
+    "baseColor": { "r": 0.8, "g": 0.8, "b": 0.8, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "ORM_Metallic", "slots": ["Metallic"], "fileKind": "path", "path": "C:/tex/orm.png", "basename": "orm.png", "mapping": null },
+      { "name": "ORM_Roughness", "slots": ["Roughness"], "fileKind": "path", "path": "C:/tex/orm.png", "basename": "orm.png", "mapping": null }
+    ]
+  },
+  {
+    "name": "UdimDiffuse",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      { "name": "UdimSheet", "slots": ["Base Color"], "fileKind": "udim", "path": "C:/tex/sheet.<UDIM>.png", "basename": "sheet.<UDIM>.png", "mapping": null }
+    ]
   }
 ]

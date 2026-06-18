@@ -53,7 +53,8 @@
       "name": "SolidColor",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -129,7 +130,8 @@
       "name": "FuzzyFabric",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -193,7 +195,8 @@
       "name": "NoneMapping",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -257,7 +260,8 @@
       "name": "StickerAlpha",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -319,7 +323,8 @@
         }
       ],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -378,7 +383,8 @@
       "unresolvedTextures": [],
       "notes": [
         "emission strength 6.667 folded into emissiveColor (HDR, unclamped)"
-      ]
+      ],
+      "bakeCandidates": []
     }
   },
   {
@@ -437,7 +443,8 @@
       "unresolvedTextures": [],
       "notes": [
         "emission strength 0.5 folded into emissiveColor"
-      ]
+      ],
+      "bakeCandidates": []
     }
   },
   {
@@ -505,7 +512,20 @@
           "fileKind": "packed"
         }
       ],
-      "notes": []
+      "notes": [
+        "diffuse: 'ComboMap' is packed (no file) — unpack or bake",
+        "roughness: 'ComboMap' is packed (no file) — unpack or bake"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "diffuse",
+          "reason": "packed"
+        },
+        {
+          "channel": "roughness",
+          "reason": "packed"
+        }
+      ]
     }
   },
   {
@@ -575,7 +595,15 @@
       "name": "RealMultiSlot",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [
+        "roughness: shares image 'ComboReal.png' with diffuse (packed ORM/MRAO?) — bake to split channels"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "roughness",
+          "reason": "orm-packed"
+        }
+      ]
     }
   },
   null,
@@ -646,7 +674,8 @@
       "name": "HeightMapped",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -703,7 +732,8 @@
       "name": "GlassTransmission",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -760,7 +790,8 @@
       "name": "AlphaScalarGlass",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -848,7 +879,8 @@
       "name": "FullParams",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -907,7 +939,8 @@
       "unresolvedTextures": [],
       "notes": [
         "emission strength 4.0 folded into emissiveColor (HDR, unclamped)"
-      ]
+      ],
+      "bakeCandidates": []
     }
   },
   {
@@ -964,7 +997,8 @@
       "name": "GlassNode",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1021,7 +1055,8 @@
       "name": "GlassGroupIor",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1078,7 +1113,8 @@
       "name": "RefractionDiamond",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1135,7 +1171,8 @@
       "name": "RefractionClamped",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1192,7 +1229,8 @@
       "name": "TransmissionLinkedZero",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1251,7 +1289,8 @@
       "unresolvedTextures": [],
       "notes": [
         "surface_render_method=BLENDED / raytrace_refraction drove Transparent"
-      ]
+      ],
+      "bakeCandidates": []
     }
   },
   {
@@ -1308,7 +1347,8 @@
       "name": "RaytraceAlone",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1365,7 +1405,8 @@
       "name": "AlphaNoise",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1424,7 +1465,8 @@
       "unresolvedTextures": [],
       "notes": [
         "refraction defaulted to 1.45 (no static IOR source)"
-      ]
+      ],
+      "bakeCandidates": []
     }
   },
   {
@@ -1481,7 +1523,8 @@
       "name": "LinkedAlphaLeaf",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1538,7 +1581,8 @@
       "name": "RaytraceDecal",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1595,7 +1639,8 @@
       "name": "MaskedFacMix",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1652,7 +1697,8 @@
       "name": "LoneTransparent",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1709,7 +1755,8 @@
       "name": "AddShaderRayTrick",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": []
+      "notes": [],
+      "bakeCandidates": []
     }
   },
   {
@@ -1768,7 +1815,8 @@
       "unresolvedTextures": [],
       "notes": [
         "surface_render_method=BLENDED / raytrace_refraction drove Transparent"
-      ]
+      ],
+      "bakeCandidates": []
     }
   },
   {
@@ -1827,6 +1875,510 @@
       "unresolvedTextures": [],
       "notes": [
         "emission strength 5.0 folded into emissiveColor (HDR, unclamped)"
+      ],
+      "bakeCandidates": []
+    }
+  },
+  {
+    "entry": {
+      "name": "TriplanarProjection",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": true,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/RockDiff.png",
+        "basename": "RockDiff.png"
+      }
+    ],
+    "report": {
+      "name": "TriplanarProjection",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [],
+      "bakeCandidates": []
+    }
+  },
+  {
+    "entry": {
+      "name": "TriplanarNoUV",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": true,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/WallDiff.png",
+        "basename": "WallDiff.png"
+      }
+    ],
+    "report": {
+      "name": "TriplanarNoUV",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "bIsTriplanar inferred from a consumer mesh without UVs (no projection node)"
+      ],
+      "bakeCandidates": []
+    }
+  },
+  {
+    "entry": {
+      "name": "MultiTexBaseColor",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/BaseRock.png",
+        "basename": "BaseRock.png"
+      }
+    ],
+    "report": {
+      "name": "MultiTexBaseColor",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "diffuse: kept 'BaseRock', dropped 'MossOverlay' — bake to merge"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "diffuse",
+          "reason": "multi-texture"
+        }
+      ]
+    }
+  },
+  {
+    "entry": {
+      "name": "DivergentNormalTiling",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/BrickDiff.png",
+        "basename": "BrickDiff.png"
+      },
+      {
+        "channel": "normal",
+        "field": "normalTexturePath",
+        "srcPath": "C:/tex/BrickDetailNormal.png",
+        "basename": "BrickDetailNormal.png"
+      }
+    ],
+    "report": {
+      "name": "DivergentNormalTiling",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "normal: Mapping differs from the exported tiling/offset — bake to reconcile"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "normal",
+          "reason": "divergent-uv"
+        }
+      ]
+    }
+  },
+  {
+    "entry": {
+      "name": "RotatedMapping",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 1.0
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/TileDiff.png",
+        "basename": "TileDiff.png"
+      }
+    ],
+    "report": {
+      "name": "RotatedMapping",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "texture Mapping rotation dropped (no WL field) — bake to fold it in"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "diffuse",
+          "reason": "rotation"
+        }
+      ]
+    }
+  },
+  {
+    "entry": {
+      "name": "PackedORM",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 0.8,
+        "g": 0.8,
+        "b": 0.8,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "metallic",
+        "field": "metallicTexturePath",
+        "srcPath": "C:/tex/orm.png",
+        "basename": "orm.png"
+      },
+      {
+        "channel": "roughness",
+        "field": "roughnessTexturePath",
+        "srcPath": "C:/tex/orm.png",
+        "basename": "orm.png"
+      }
+    ],
+    "report": {
+      "name": "PackedORM",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "roughness: shares image 'orm.png' with metallic (packed ORM/MRAO?) — bake to split channels"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "roughness",
+          "reason": "orm-packed"
+        }
+      ]
+    }
+  },
+  {
+    "entry": {
+      "name": "UdimDiffuse",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "UdimDiffuse",
+      "ignoredSlots": [],
+      "unresolvedTextures": [
+        {
+          "channel": "diffuse",
+          "texture": "UdimSheet",
+          "fileKind": "udim"
+        }
+      ],
+      "notes": [
+        "diffuse: 'UdimSheet' is udim (no file) — bake to recover"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "diffuse",
+          "reason": "udim"
+        }
       ]
     }
   }

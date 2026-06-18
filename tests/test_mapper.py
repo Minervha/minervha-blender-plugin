@@ -33,6 +33,49 @@ def approx_equal(a, b, tol=1e-9):
     return a == b
 
 
+# Phase-1 shading-compatibility signals — the golden compares only entry/textures, so the
+# new report-level signals (bIsTriplanar inference, per-loss notes + bakeCandidates) are
+# asserted explicitly here. Each value: bIsTriplanar expectation, required (channel,reason)
+# bakeCandidates, and an optional note substring.
+_SEMANTIC = {
+    "TriplanarProjection":   {"triplanar": True},
+    "TriplanarNoUV":         {"triplanar": True, "note_sub": "without UVs"},
+    "MultiTexBaseColor":     {"triplanar": False, "bake": [("diffuse", "multi-texture")]},
+    "DivergentNormalTiling": {"bake": [("normal", "divergent-uv")]},
+    "RotatedMapping":        {"bake": [("diffuse", "rotation")]},
+    "PackedORM":             {"bake": [("roughness", "orm-packed")]},
+    "UdimDiffuse":           {"bake": [("diffuse", "udim")]},
+}
+
+
+def run_semantic():
+    fixtures = json.load(open(os.path.join(HERE, "fixtures", "normalized_materials.json"), encoding="utf-8"))
+    by_name = {m.get("name"): m for m in fixtures}
+    fails = []
+    for name, checks in _SEMANTIC.items():
+        norm = by_name.get(name)
+        if norm is None:
+            fails.append((name, "fixture missing")); continue
+        r = mapper.map_material(norm)
+        if r is None:
+            fails.append((name, "mapper returned None")); continue
+        entry, report = r["entry"], r["report"]
+        if "triplanar" in checks and entry["bIsTriplanar"] is not checks["triplanar"]:
+            fails.append((name, f"bIsTriplanar={entry['bIsTriplanar']!r} expected {checks['triplanar']!r}"))
+        for ch, reason in checks.get("bake", []):
+            if {"channel": ch, "reason": reason} not in report["bakeCandidates"]:
+                fails.append((name, f"missing bakeCandidate ({ch},{reason}); have {report['bakeCandidates']}"))
+        sub = checks.get("note_sub")
+        if sub and not any(sub in n for n in report["notes"]):
+            fails.append((name, f"missing note ~ '{sub}'; have {report['notes']}"))
+    if fails:
+        print(f"SEMANTIC FAILED — {len(fails)} issue(s):")
+        for n, m in fails:
+            print(f"  {n}: {m}")
+        sys.exit(1)
+    print(f"SEMANTIC OK — {len(_SEMANTIC)} shading-compat signals verified")
+
+
 def run():
     fixtures = json.load(open(os.path.join(HERE, "fixtures", "normalized_materials.json"), encoding="utf-8"))
     golden = json.load(open(os.path.join(HERE, "golden", "expected.json"), encoding="utf-8"))
@@ -64,3 +107,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+    run_semantic()

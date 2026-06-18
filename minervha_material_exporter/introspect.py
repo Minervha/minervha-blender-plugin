@@ -68,7 +68,7 @@ def normalize_material(mat):
     base_color = metallic = roughness = emission_color = emission_strength = None
     specular = ior = transmission = alpha = None
     principled_with_unlinked = 0
-    for p_node, _ in principled:
+    for p_node, p_tree in principled:
         bc = p_node.inputs.get('Base Color')
         met = p_node.inputs.get('Metallic')
         rough = p_node.inputs.get('Roughness')
@@ -108,6 +108,26 @@ def normalize_material(mat):
             transmission = float(trans.default_value)
         if alpha_in is not None and not alpha_in.is_linked and alpha is None:
             alpha = float(alpha_in.default_value)
+        # Linked-but-static (K rung): a Base Color / Metallic / Roughness / Emission fed by a
+        # Value/RGB/Reroute/single-Group-Input hop that resolves to a constant — read it instead
+        # of leaving the default. Does NOT count toward `unlinked` (that tracks genuinely
+        # unlinked Principled inputs); a dynamic source falls through to a bakeCandidate downstream.
+        if base_color is None and bc is not None and bc.is_linked:
+            c = bsdf_trace._resolve_color(bc, p_tree, parent_map)
+            if c is not None:
+                base_color = c
+        if metallic is None and met is not None and met.is_linked:
+            dyn, val = bsdf_trace._resolve_input(met, p_tree, parent_map)
+            if not dyn and val is not None:
+                metallic = val
+        if roughness is None and rough is not None and rough.is_linked:
+            dyn, val = bsdf_trace._resolve_input(rough, p_tree, parent_map)
+            if not dyn and val is not None:
+                roughness = val
+        if emission_color is None and em is not None and em.is_linked:
+            c = bsdf_trace._resolve_color(em, p_tree, parent_map)
+            if c is not None:
+                emission_color = c
         if unlinked:
             principled_with_unlinked += 1
 
@@ -116,6 +136,9 @@ def normalize_material(mat):
         s = nm_node.inputs.get('Strength')
         if s is not None and normal_strength is None:
             normal_strength = float(s.default_value)
+    # Fallback: the Normal slot fed by a Bump node (not a Normal Map node) — read its Strength.
+    if normal_strength is None:
+        normal_strength = bsdf_trace.first_bump_strength(mat.node_tree)
 
     # Active-output-anchored shader walk: the source of truth for the material
     # `type` / `refraction` (Glass/Refraction/Transparent, linked Alpha/Transmission,
@@ -134,20 +157,26 @@ def normalize_material(mat):
         roughness = walk["refractiveRoughness"]
 
     tex_list = []
+    projection_mapped = False
     for tex_node, tree in textures:
         slots = bsdf_trace.trace_from_texture(tex_node, tree, parent_map)
         if not slots:
             slots = ["UNKNOWN (or not Principled)"]
+        if bsdf_trace.texture_is_projection_mapped(tex_node, tree, parent_map):
+            projection_mapped = True
         image = tex_node.image
         file_str = bsdf_trace.resolve_image_file(image)
         c = _classify_file(file_str)
         mnode = bsdf_trace.find_mapping_for_texture(tex_node, tree, parent_map)
         mdata = bsdf_trace.get_mapping_data(mnode) if mnode else None
         if mdata:
-            loc, _rot, sca = mdata
+            # rot is in DEGREES (get_mapping_data). The mapper has no rotation field but
+            # uses it to warn when a non-zero rotation is dropped (no WL equivalent).
+            loc, rot, sca = mdata
             mapping = {
                 "loc": {"x": loc[0], "y": loc[1], "z": loc[2]},
                 "scale": {"x": sca[0], "y": sca[1], "z": sca[2]},
+                "rot": {"x": rot[0], "y": rot[1], "z": rot[2]},
             }
         else:
             mapping = None
@@ -188,6 +217,8 @@ def normalize_material(mat):
         "transmissionStaticValue": walk["transmissionStaticValue"],
         "refractiveIor": walk["refractiveIor"],
         "maskedFacMix": walk["maskedFacMix"],
+        "projectionMapped": projection_mapped,
+        "consumedByNoUvObject": False,  # set by collect() once object context is known
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,
     }
 
@@ -213,6 +244,29 @@ def _materials_for_scope(scope, objects):
     return out
 
 
+def _annotate_no_uv(norms, mats, scope, objects):
+    """Set consumedByNoUvObject when a mesh that uses the material has no UV layer
+    (signal b for bIsTriplanar inference). Scope-aware; falls back to all objects."""
+    if objects is None:
+        objects = (list(bpy.context.selected_objects) if scope == "SELECTED"
+                   else list(bpy.data.objects))
+    no_uv_mat_names = set()
+    for obj in objects:
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        if len(obj.data.uv_layers) > 0:
+            continue
+        for slot in getattr(obj, "material_slots", []):
+            if slot.material is not None:
+                no_uv_mat_names.add(slot.material.name)
+    for norm, mat in zip(norms, mats):
+        if mat.name in no_uv_mat_names:
+            norm["consumedByNoUvObject"] = True
+
+
 def collect(scope="FILE", objects=None):
     """Return NormalizedMaterial[] for the given scope."""
-    return [normalize_material(m) for m in _materials_for_scope(scope, objects)]
+    mats = _materials_for_scope(scope, objects)
+    norms = [normalize_material(m) for m in mats]
+    _annotate_no_uv(norms, mats, scope, objects)
+    return norms

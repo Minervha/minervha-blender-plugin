@@ -18,8 +18,9 @@ except ImportError:                 # importable for syntax check without Blende
 
 # Generator texture nodes whose output is procedural -> cannot be exported as an image;
 # their materials are flagged so the report can tell the user to bake them manually.
+# (TEX_MUSGRAVE removed in Blender 4.1 — folded into TEX_NOISE; no node carries that type.)
 _PROCEDURAL_NODE_TYPES = {
-    "TEX_NOISE", "TEX_VORONOI", "TEX_MUSGRAVE", "TEX_WAVE",
+    "TEX_NOISE", "TEX_VORONOI", "TEX_WAVE",
     "TEX_MAGIC", "TEX_GRADIENT", "TEX_CHECKER", "TEX_BRICK",
 }
 

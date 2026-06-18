@@ -128,6 +128,82 @@ def find_mapping_for_texture(tex_node, node_tree, parent_map):
     return None
 
 
+def texture_is_projection_mapped(tex_node, node_tree, parent_map):
+    """True if the texture is driven by object/world projection rather than UVs: its
+    Image node uses Box projection, or its Vector input traces back to a Texture
+    Coordinate 'Object'/'Generated' output (through Reroute / Mapping / Group). Used to
+    set bIsTriplanar — the closest WL equivalent to a non-UV projection."""
+    if getattr(tex_node, "projection", "FLAT") == "BOX":
+        return True
+    vector_input = tex_node.inputs.get("Vector")
+    if not vector_input or not vector_input.is_linked:
+        return False
+    stack = [(vector_input, node_tree)]
+    visited = set()
+    while stack:
+        socket, tree = stack.pop()
+        key = (id(tree), id(socket))
+        if key in visited:
+            continue
+        visited.add(key)
+        for link in socket.links:
+            src = link.from_node
+            fsock = link.from_socket
+            if src.type == "TEX_COORD":
+                if fsock.name in ("Object", "Generated"):
+                    return True
+                continue
+            if src.type == "MAPPING":
+                inp = src.inputs.get("Vector")
+                if inp and inp.is_linked:
+                    stack.append((inp, tree))
+                continue
+            if src.type == "REROUTE":
+                if src.inputs and src.inputs[0].is_linked:
+                    stack.append((src.inputs[0], tree))
+                continue
+            if src.type == "GROUP_INPUT":
+                idx = next((i for i, out in enumerate(src.outputs) if out == fsock), None)
+                if idx is not None:
+                    for p_node, p_tree in parent_map.get(tree, []):
+                        if idx < len(p_node.inputs) and p_node.inputs[idx].is_linked:
+                            stack.append((p_node.inputs[idx], p_tree))
+                continue
+            if src.type == "GROUP" and src.node_tree:
+                idx = next((i for i, out in enumerate(src.outputs) if out == fsock), None)
+                if idx is not None:
+                    for go in src.node_tree.nodes:
+                        if go.type == "GROUP_OUTPUT" and idx < len(go.inputs) and go.inputs[idx].is_linked:
+                            stack.append((go.inputs[idx], src.node_tree))
+                            break
+                continue
+    return False
+
+
+def first_bump_strength(node_tree, _seen=None):
+    """Strength of the first Bump node reachable (recursing groups), or None — the
+    fallback source for normalMapAmplification when the Normal slot is fed by a Bump
+    node rather than a Normal Map node."""
+    if _seen is None:
+        _seen = set()
+    if node_tree is None or id(node_tree) in _seen:
+        return None
+    _seen.add(id(node_tree))
+    for n in node_tree.nodes:
+        if n.type == "BUMP":
+            s = n.inputs.get("Strength")
+            if s is not None:
+                try:
+                    return float(s.default_value)
+                except (AttributeError, TypeError):
+                    return None
+        if n.type == "GROUP" and n.node_tree:
+            r = first_bump_strength(n.node_tree, _seen)
+            if r is not None:
+                return r
+    return None
+
+
 def get_mapping_data(mapping_node):
     """Return (location, rotation_degrees, scale) from a Mapping node, or None if non-standard."""
     try:
@@ -263,6 +339,42 @@ def _resolve_input(socket, tree, parent_map):
                     continue
             return (True, None)
         return (True, None)
+
+
+def _resolve_color(socket, tree, parent_map):
+    """RGBA dict a color socket resolves to as a constant (its own default, or upstream
+    through Reroute / RGB node / single Group-Input hop), or None if dynamic/unreadable.
+    The color sibling of ``_resolve_input`` — used to read a linked-but-static Base Color
+    or Emission into the flat WL color instead of leaving the default."""
+    cur, ctree = socket, tree
+    seen = set()
+    while True:
+        if not cur.is_linked:
+            return _socket_color(cur)
+        key = (id(ctree), id(cur))
+        if key in seen:
+            return None
+        seen.add(key)
+        link = cur.links[0]
+        src, fsock = link.from_node, link.from_socket
+        if src.type == 'REROUTE':
+            cur = src.inputs[0]
+            continue
+        if src.type == 'RGB':
+            try:
+                v = src.outputs[0].default_value
+                return {"r": v[0], "g": v[1], "b": v[2], "a": v[3] if len(v) > 3 else 1}
+            except (AttributeError, TypeError, IndexError):
+                return None
+        if src.type == 'GROUP_INPUT':
+            idx = next((i for i, o in enumerate(src.outputs) if o == fsock), None)
+            parents = parent_map.get(ctree, [])
+            if idx is not None and parents:
+                p_node, p_tree = parents[0]
+                if idx < len(p_node.inputs):
+                    cur, ctree = p_node.inputs[idx], p_tree
+                    continue
+        return None
 
 
 def find_active_output(tree):

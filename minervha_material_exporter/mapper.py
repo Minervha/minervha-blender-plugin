@@ -36,6 +36,13 @@ def _inv_scale(v):
     return 1.0 / v if (_is_num(v) and v != 0) else 1
 
 
+def _vec_close(a, b, tol=1e-4):
+    """True if two {x,y,z} vectors agree within tol (None-safe)."""
+    if a is None or b is None:
+        return a is b
+    return all(abs((a.get(k) or 0) - (b.get(k) or 0)) <= tol for k in ("x", "y", "z"))
+
+
 _ALPHA_RE = re.compile(r"^alpha$", re.IGNORECASE)
 
 # Constant (unlinked) Principled Alpha at/above this stays Opaque — kills float
@@ -79,9 +86,17 @@ def map_material(norm):
     if not norm or norm.get("skipped"):
         return None
 
-    report = {"name": norm.get("name"), "ignoredSlots": [], "unresolvedTextures": [], "notes": []}
+    report = {"name": norm.get("name"), "ignoredSlots": [], "unresolvedTextures": [],
+              "notes": [], "bakeCandidates": []}
     channel_tex = {}  # channel -> chosen texture (first-wins; dict preserves insertion order)
     has_alpha = False
+
+    def _bake_candidate(channel, reason):
+        # Structured, de-duplicated trigger the Phase-2 bake pipeline consumes. Every
+        # silent loss below also records one so nothing is dropped without a signal.
+        rec = {"channel": channel, "reason": reason}
+        if rec not in report["bakeCandidates"]:
+            report["bakeCandidates"].append(rec)
 
     for tex in (norm.get("textures") or []):
         for slot in (tex.get("slots") or []):
@@ -94,12 +109,39 @@ def map_material(norm):
                 continue
             if tex.get("fileKind") != "path":
                 # packed / generated / missing / udim — no single file to copy
+                kind = tex.get("fileKind")
                 report["unresolvedTextures"].append(
-                    {"channel": ch, "texture": tex.get("name"), "fileKind": tex.get("fileKind")}
+                    {"channel": ch, "texture": tex.get("name"), "fileKind": kind}
                 )
+                hint = "unpack or bake" if kind == "packed" else "bake to recover"
+                report["notes"].append(f"{ch}: '{tex.get('name')}' is {kind} (no file) — {hint}")
+                _bake_candidate(ch, kind)
                 continue
             if ch not in channel_tex:
                 channel_tex[ch] = tex
+            elif channel_tex[ch].get("path") != tex.get("path"):
+                # A second, different image targets an already-filled channel (MixRGB /
+                # decal / detail / AO layering). First-wins keeps the first — record the
+                # dropped one so the loss is never silent (bake to merge faithfully).
+                report["notes"].append(
+                    f"{ch}: kept '{channel_tex[ch].get('name')}', dropped '{tex.get('name')}' — bake to merge")
+                _bake_candidate(ch, "multi-texture")
+
+    # ORM/MRAO: the same source image landing in two channels (e.g. a Separate Color
+    # feeding metallic + roughness from one packed map) is not independent. First-wins
+    # kept it in each channel as-is; flag it so the user can bake to split the channels.
+    _seen_path = {}
+    for ch, tex in channel_tex.items():
+        p = tex.get("path")
+        if not p:
+            continue
+        if p in _seen_path:
+            report["notes"].append(
+                f"{ch}: shares image '{tex.get('basename')}' with {_seen_path[p]} "
+                f"(packed ORM/MRAO?) — bake to split channels")
+            _bake_candidate(ch, "orm-packed")
+        else:
+            _seen_path[p] = ch
 
     # textureTiling / textureOffset come from the diffuse texture's mapping when
     # present, else from any mapped texture in the material. textureTiling is the
@@ -115,6 +157,23 @@ def map_material(norm):
                 break
     tiling = mapping.get("scale") if (mapping and mapping.get("scale")) else None
     offset = mapping.get("loc") if (mapping and mapping.get("loc")) else None
+
+    # Divergence: WL stores ONE tiling/offset per material. A mapped channel whose
+    # Mapping disagrees with the exported one is silently flattened — warn (bake to
+    # reconcile). A non-zero rotation on the chosen mapping has no WL field at all.
+    if mapping is not None:
+        chosen_scale, chosen_loc = mapping.get("scale"), mapping.get("loc")
+        for ch, tex in channel_tex.items():
+            m = tex.get("mapping")
+            if not m or m is mapping:
+                continue
+            if not _vec_close(m.get("scale"), chosen_scale) or not _vec_close(m.get("loc"), chosen_loc):
+                report["notes"].append(f"{ch}: Mapping differs from the exported tiling/offset — bake to reconcile")
+                _bake_candidate(ch, "divergent-uv")
+        rot = mapping.get("rot")
+        if rot and any(abs(rot.get(k) or 0) > 1e-4 for k in ("x", "y", "z")):
+            report["notes"].append("texture Mapping rotation dropped (no WL field) — bake to fold it in")
+            _bake_candidate("diffuse", "rotation")
 
     # Emission: only glow when strength > 0. WL has no strength field, so fold
     # strength into the color. NOT clamped — the game stores HDR emissive (>1
@@ -214,6 +273,15 @@ def map_material(norm):
     specular = clamp01(norm.get("specular")) if _is_num(norm.get("specular")) else 0.5
     two_sided = bool(norm.get("twoSided")) if isinstance(norm.get("twoSided"), bool) else False
 
+    # Triplanar: a real projection-mapped texture (Object/Generated coords or Box
+    # projection), or — when the material is consumed by a mesh with no UVs — inferred
+    # so a no-UV object renders as a plausible projection instead of a UV smear.
+    projection_mapped = bool(norm.get("projectionMapped", False))
+    no_uv = bool(norm.get("consumedByNoUvObject", False))
+    triplanar = projection_mapped or no_uv
+    if triplanar and no_uv and not projection_mapped:
+        report["notes"].append("bIsTriplanar inferred from a consumer mesh without UVs (no projection node)")
+
     entry = {
         "name": norm.get("name"),
         "type": mat_type,
@@ -232,7 +300,7 @@ def map_material(norm):
         "maskedAlphaCutoff": cutoff,
         "textureTiling": {"x": _inv_scale(tiling["x"]), "y": _inv_scale(tiling["y"]), "z": _inv_scale(tiling["z"])} if tiling else {"x": 1, "y": 1, "z": 1},
         "textureOffset": {"x": offset["x"], "y": offset["y"], "z": offset["z"]} if offset else {"x": 0, "y": 0, "z": 0},
-        "bIsTriplanar": False,
+        "bIsTriplanar": triplanar,
         "bIsTwoSided": two_sided,
         "bFlipGreenChannel": True,
         "textureRandomness": 0,

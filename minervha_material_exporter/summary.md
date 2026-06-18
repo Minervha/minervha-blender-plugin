@@ -20,8 +20,20 @@ Source of the Blender 4.2+ extension (this folder = build root, zipped for insta
 Validated live on Blender 5.1.2. (Mode A / `.txt` export was dropped by request — `.wlsave` only.)
 Full v18 material schema: [`../docs/wl-customMaterial-schema.md`](../docs/wl-customMaterial-schema.md).
 
-Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py`), fixtures + golden regenerable via
-`_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
+**Shading compatibility — Phase 1 (pure-data, validated live Blender 5.1.2).** Stops silent fidelity loss
+and infers what the flat schema can still hold, without baking: `mapper.py` emits per-channel loss **notes +
+structured `bakeCandidates`** (multi-texture / divergent-UV / dropped rotation / packed ORM / UDIM·packed)
+and `bIsTriplanar` from `projectionMapped`/`consumedByNoUvObject`; `bsdf_trace.py` adds
+`texture_is_projection_mapped`, `first_bump_strength`, `_resolve_color`; `introspect.py` reads linked-static
+PBR scalars (Value/RGB-driven Base Color/Metallic/Roughness/Emission), threads Mapping **rotation**, and sets
+`projectionMapped`/`consumedByNoUvObject`; `scene_introspect.py` drops the dead `TEX_MUSGRAVE`. The
+`bakeCandidates` are the trigger Phase 2 (opt-in baking) will consume. Plan + chunks:
+[`../docs/plans/features/shading-compatibility/plan.md`](../docs/plans/features/shading-compatibility/plan.md)
+(Phase 2 baking + Phase 3 polish pending).
+
+Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
+Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
++ golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
 `test_tiling.py` (`textureTiling` = reciprocal of Blender Mapping Scale);
 `test_prop_mapper.py` + `test_transform.py` (snapshot of `prop_mapper.py` — `normalized_objects.json` fixtures,
 golden `expected_props.json` regenerable via `_gen_golden_props.py`);
