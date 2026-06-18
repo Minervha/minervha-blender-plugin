@@ -7,10 +7,13 @@ material names, gather textures (deduped by basename), rewrite relative paths to
     <Name>/<Name>.json          # collection JSON (level "")
     <Name>/Textures/<file>      # bundled textures
 
-Texture policy ("copy real, re-export packed"): on-disk PNG/JPG are copied as-is;
-packed/generated images and other on-disk formats (.tga, .exr…) are re-exported to
-PNG via Blender in a pre-pass, so the mapper then sees them as ordinary path-kind
-textures. UDIM/missing stay unresolved (material created without that texture).
+Texture policy ("copy real, re-export the rest"): on-disk PNG/JPG that already satisfy
+the export options are copied as-is; packed/generated images, other on-disk formats
+(.tga, .exr…), and anything needing a format/resolution change are re-exported via
+Blender in a pre-pass, so the mapper then sees them as ordinary path-kind textures.
+Optional `tex_opts` drive that pre-pass: prefer JPG for opaque textures (alpha-bearing
+images always stay PNG), a JPG quality, and a max-resolution downscale cap. UDIM/missing
+stay unresolved (material created without that texture).
 
 Runs Blender-side (needs bpy for re-export); the on-disk copy path also works without.
 """
@@ -73,15 +76,16 @@ def _unique_name(base, taken):
     return f"{base}_{i}"
 
 
-def _png_name(stem, used):
+def _export_name(stem, ext, used):
+    """A tmpdir-unique re-export file name `<sanitized stem><ext>` (ext includes the dot)."""
     base = re.sub(r"[\\/:\0]", "_", str(stem)).strip() or "texture"
-    base = base + ".png"
-    if base not in used:
-        return base
+    name = base + ext
+    if name not in used:
+        return name
     i = 2
-    while f"{base[:-4]}_{i}.png" in used:
+    while f"{base}_{i}{ext}" in used:
         i += 1
-    return f"{base[:-4]}_{i}.png"
+    return f"{base}_{i}{ext}"
 
 
 def _unique_basename(base, taken):
@@ -95,21 +99,94 @@ def _unique_basename(base, taken):
     return f"{stem}_{i}{ext}"
 
 
-def _reexport_image_to_png(image_name, dest_path):
-    """Re-export a bpy image (packed/generated/other format) to a PNG. True on success."""
+# Image.depth is total bits across all channels. Blender always loads a 4-channel RGBA
+# buffer (Image.channels is always 4), so depth — not channels — is what tells RGB from
+# RGBA: grayscale=8, RGB(8)=24, RGB half=48, RGB float=96 carry NO alpha; 16/32/64/128 do.
+# Any other / unknown / 0 (buffer not loaded) depth is treated as alpha-bearing, so we keep
+# it PNG and never silently drop a real alpha channel.
+_NO_ALPHA_DEPTHS = {8, 24, 48, 96}
+
+
+def _image_facts(image_name):
+    """(has_alpha, width, height) for a bpy image, queried defensively. Without bpy (or a
+    missing image) returns (True, 0, 0): 'assume alpha' keeps the texture PNG (never drop an
+    alpha channel) and a 0 size disables the resolution cap for it."""
     if bpy is None:
-        return False
+        return True, 0, 0
     img = bpy.data.images.get(image_name)
     if img is None:
-        return False
+        return True, 0, 0
+    try:
+        has_alpha = int(img.depth or 0) not in _NO_ALPHA_DEPTHS
+    except Exception:
+        has_alpha = True
+    try:
+        w, h = int(img.size[0]), int(img.size[1])
+    except Exception:
+        w, h = 0, 0
+    return has_alpha, w, h
+
+
+def _plan_texture(file_kind, ext, has_alpha, width, height, prefer_jpg, max_res):
+    """Pure decision for one texture. Returns (target_format, needs_export):
+      target_format — 'JPEG' or 'PNG' to write (None when nothing is needed).
+      needs_export  — True to re-encode via Blender; False to copy the on-disk file as-is.
+
+    A texture with an alpha channel always stays PNG (JPEG can't carry alpha). Otherwise
+    `prefer_jpg` picks JPEG; with it off, an existing JPG stays JPG and everything else maps
+    to PNG (mirrors the legacy 'packed/generated → PNG' policy). On-disk PNG/JPG already in
+    the right format and within `max_res` are left to be copied untouched."""
+    if file_kind in ("missing", "udim"):
+        return None, False
+    on_disk = file_kind == "path" and ext in _COPY_EXT
+    if has_alpha:
+        target = "PNG"
+    elif prefer_jpg:
+        target = "JPEG"
+    elif ext in (".jpg", ".jpeg"):
+        target = "JPEG"
+    else:
+        target = "PNG"
+    too_big = bool(max_res) and (width > max_res or height > max_res)
+    if on_disk:
+        needs_convert = ext == ".png" and target == "JPEG"
+        if not needs_convert and not too_big:
+            return None, False          # already fine — copy as-is
+    return target, True
+
+
+def _export_image(image_name, dest_dir, used, target_format, jpg_quality, max_res):
+    """Re-export a bpy image into `dest_dir` as `target_format` ('JPEG'|'PNG'), downscaled to
+    fit `max_res` (longest side) when set. Mutates only a throwaway copy, so the user's image
+    is never touched. Returns (dest_path, basename) on success, else None."""
+    if bpy is None:
+        return None
+    img = bpy.data.images.get(image_name)
+    if img is None:
+        return None
+    ext = ".jpg" if target_format == "JPEG" else ".png"
+    stem = os.path.splitext(image_name or "texture")[0]
+    base = _export_name(stem, ext, used)
+    dest = os.path.join(dest_dir, base)
     tmp = img.copy()
     try:
-        tmp.file_format = "PNG"
-        tmp.filepath_raw = dest_path
-        tmp.save()
-        return os.path.isfile(dest_path) and os.path.getsize(dest_path) > 0
+        if max_res:
+            w, h = int(tmp.size[0]), int(tmp.size[1])
+            if w and h and (w > max_res or h > max_res):
+                scale = max_res / float(max(w, h))
+                tmp.scale(max(1, round(w * scale)), max(1, round(h * scale)))
+        tmp.file_format = target_format
+        tmp.filepath_raw = dest
+        if target_format == "JPEG":
+            tmp.save(quality=int(jpg_quality))
+        else:
+            tmp.save()
+        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+            used.add(base)
+            return dest, base
+        return None
     except Exception:
-        return False
+        return None
     finally:
         try:
             bpy.data.images.remove(tmp)
@@ -117,13 +194,17 @@ def _reexport_image_to_png(image_name, dest_path):
             pass
 
 
-def _resolve_packed_textures(norms, tmpdir):
-    """Pre-pass: re-export packed/generated/non-png-jpg textures to PNG; mutate the
-    texture dicts in place to look like on-disk path textures. Returns the set of
-    re-exported textures' source paths (the tmpdir PNGs) — keyed on srcPath, not
-    basename, so the copied-vs-re-exported classification survives a later collision
-    rename of the bundled basename."""
-    cache = {}      # image_name -> (png_path, basename) or None (failed)
+def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=None):
+    """Pre-pass over every texture in `norms`. Re-exports packed/generated/non-copyable
+    images and (per `_plan_texture`) converts opaque textures to JPG and/or downscales to
+    `max_res`, writing the result into `tmpdir` and mutating the texture dict in place into a
+    plain on-disk path texture. On-disk PNG/JPG that already satisfy the options are left
+    alone (copied as-is downstream). Returns the set of re-exported source paths (the tmpdir
+    files) — keyed on srcPath, not basename, so the copied-vs-re-exported classification
+    survives a later collision rename of the bundled basename. With `tex_opts` off
+    (prefer_jpg False, max_res None) this reproduces the legacy 'packed/generated → PNG'
+    behavior; without bpy it re-exports nothing (pure-Python tests copy on-disk files)."""
+    cache = {}      # image_name -> (path, basename) | None
     used = set()    # basenames already emitted into tmpdir
     reexported = set()
     for norm in norms:
@@ -131,26 +212,18 @@ def _resolve_packed_textures(norms, tmpdir):
             kind = t.get("fileKind")
             if kind in ("missing", "udim"):
                 continue  # nothing to re-export (UDIM unsupported in v1)
-            ext = os.path.splitext(t.get("path") or "")[1].lower()
-            need = kind in ("packed", "generated") or (kind == "path" and ext not in _COPY_EXT)
-            if not need:
-                continue
             img_name = t.get("name")
             if img_name not in cache:
-                stem = os.path.splitext(t.get("basename") or img_name or "texture")[0]
-                base = _png_name(stem, used)
-                dest = os.path.join(tmpdir, base)
-                ok = _reexport_image_to_png(img_name, dest)
-                if ok:
-                    used.add(base)
-                    cache[img_name] = (dest, base)
-                else:
-                    cache[img_name] = None
+                ext = os.path.splitext(t.get("path") or t.get("basename") or "")[1].lower()
+                has_alpha, w, h = _image_facts(img_name)
+                target, needs = _plan_texture(kind, ext, has_alpha, w, h, prefer_jpg, max_res)
+                cache[img_name] = (_export_image(img_name, tmpdir, used, target, jpg_quality, max_res)
+                                   if needs else None)
             res = cache.get(img_name)
             if res:
                 t["fileKind"], t["path"], t["basename"] = "path", res[0], res[1]
-                reexported.add(res[0])      # srcPath of the re-exported PNG
-            # else: leave as-is -> mapper drops it -> reported as missing
+                reexported.add(res[0])      # srcPath of the re-exported file
+            # else: on-disk path -> copy as-is; packed/generated that failed -> mapper drops it
     return reexported
 
 
@@ -185,16 +258,21 @@ def _new_report(name, name_original, dest_path):
     }
 
 
-def _build_material_entries(norms, name, report, tmpdir):
+def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
     """Map -> sanitize+dedup+namespace material names -> gather textures. Mutates `report`.
 
     Material names are namespaced "<name>/<final>" (both export modes); a prop's
     CustomMaterial{i} references these exact strings. The "/" is legal in the `name`
-    field (an internal reference, not a filename). Returns (entries, tex_bytes,
+    field (an internal reference, not a filename). `tex_opts` (or None) drives the texture
+    pre-pass: {prefer_jpg, jpg_quality, max_res}. Returns (entries, tex_bytes,
     material_names) where material_names maps the original Blender material name ->
     its final namespaced customMaterials name.
     """
-    reexported = _resolve_packed_textures(norms, tmpdir)
+    opts = tex_opts or {}
+    reexported = _process_textures(norms, tmpdir,
+                                   prefer_jpg=bool(opts.get("prefer_jpg")),
+                                   jpg_quality=int(opts.get("jpg_quality", 90)),
+                                   max_res=opts.get("max_res"))
 
     # Pass 1: map, sanitize + dedup + namespace names, gather unique textures by SOURCE path.
     # Textures are deduped by srcPath, NOT by basename: two distinct files that share a basename
@@ -260,12 +338,13 @@ def _build_material_entries(norms, name, report, tmpdir):
     return entries, tex_bytes, material_names
 
 
-def build_wlsave(norms, name, dest_path, skeleton_path=None):
+def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None):
     """Build `dest_path` (.wlsave) from NormalizedMaterial[] `norms` as collection `name`.
 
     Materials-only bundle. Collection name, material names and texture basenames are
     sanitized to the game's filename charset (see _sanitize_name); material names are
-    additionally namespaced "<Collection>/<Mat>". Returns a report dict: name,
+    additionally namespaced "<Collection>/<Mat>". `tex_opts` (or None) drives the texture
+    pre-pass: {prefer_jpg, jpg_quality, max_res}. Returns a report dict: name,
     nameOriginal, created[], renamed[], skipped[], texturesCopied[],
     texturesReExported[], texturesMissing[], texturesRenamed[].
     """
@@ -276,7 +355,7 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None):
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_tex_")
     try:
-        entries, tex_bytes, _ = _build_material_entries(norms, name, report, tmpdir)
+        entries, tex_bytes, _ = _build_material_entries(norms, name, report, tmpdir, tex_opts)
         skel["level"] = ""
         skel["customMaterials"] = entries
         skel["bHasDedicatedIcon"] = False
@@ -288,7 +367,7 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None):
 
 
 def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
-                       position_scale=1.0, level=""):
+                       position_scale=1.0, level="", tex_opts=None):
     """Build a full-scene `.wlsave`: customMaterials + props (UserMesh/Group) + Models/ OBJs.
 
     `norms`        — NormalizedMaterial[] for the materials used by the in-scope objects.
@@ -303,6 +382,7 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                      name ("Showroom"/"NewWildLifeMap"/"OldWildLifeMap") = a map save the Studio
                      installs under MySaves/<level>/. Only the JSON field changes — the ZIP layout
                      is identical either way.
+    `tex_opts`     — texture pre-pass options (or None): {prefer_jpg, jpg_quality, max_res}.
 
     One OBJ per unique mesh datablock (instances reuse the same MeshPath). Material names are
     namespaced; each prop's CustomMaterial{i} references them by that exact name. Returns the
@@ -319,7 +399,7 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_scene_")
     try:
-        entries, tex_bytes, material_names = _build_material_entries(norms, name, report, tmpdir)
+        entries, tex_bytes, material_names = _build_material_entries(norms, name, report, tmpdir, tex_opts)
 
         # One OBJ per unique mesh datablock (instances reuse it).
         models_dir = os.path.join(tmpdir, "Models")

@@ -38,8 +38,11 @@ its materials. A **Target** dropdown then chooses what the `.wlsave` becomes: a 
 or *Old Wild Life Map*. The Studio installs a collection under `Collections/` and a map save under
 `MySaves/<map>/`.
 
-**Textures**: on-disk PNG/JPG are copied as-is; packed/generated images and other formats (`.tga`, `.exr`…)
-are re-exported to PNG automatically.
+**Textures** (the *Textures* box): by default opaque textures are re-encoded to **JPG** at an adjustable
+quality (smaller files), while textures with an alpha channel always stay **PNG**. An optional
+**Max resolution** cap downscales anything larger (aspect ratio kept). Packed/generated images and other
+formats (`.tga`, `.exr`…) are re-exported automatically. Turn *Prefer JPG over PNG* off to keep on-disk
+PNG/JPG as-is and re-export the rest to PNG.
 
 **Names**: the game only accepts `A-Za-z0-9_-` in file names. The collection name, material names and
 texture file names are sanitized automatically (accents transliterated — `é`→`e` — other symbols replaced

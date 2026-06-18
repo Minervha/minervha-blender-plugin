@@ -7,7 +7,7 @@ and hierarchy (Group props). Opens a file-save dialog, then shows a report.
 """
 
 import bpy
-from bpy.props import EnumProperty, PointerProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper
 
 try:
@@ -43,6 +43,17 @@ TARGET_ITEMS = [
     ('Showroom', "Showroom (map)", "Full save placed on the Showroom map"),
     ('NewWildLifeMap', "New Wild Life Map", "Full save placed on the New Wild Life map"),
     ('OldWildLifeMap', "Old Wild Life Map", "Full save placed on the Old Wild Life map"),
+]
+
+
+# Texture resolution cap. 'NONE' -> keep originals; otherwise the identifier IS the pixel
+# limit (longest side); the operator parses int(value). Downscaling preserves aspect ratio.
+MAX_RES_ITEMS = [
+    ('NONE', "No limit", "Keep textures at their original resolution"),
+    ('4096', "4096 px", "Downscale textures whose longest side exceeds 4096 px"),
+    ('2048', "2048 px", "Downscale textures whose longest side exceeds 2048 px"),
+    ('1024', "1024 px", "Downscale textures whose longest side exceeds 1024 px"),
+    ('512', "512 px", "Downscale textures whose longest side exceeds 512 px"),
 ]
 
 
@@ -95,12 +106,22 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             return self._execute_scene(context, name)
         return self._execute_materials(context, name)
 
+    def _tex_opts(self, context):
+        """Texture pre-pass options from the scene props (see wlsave_export._process_textures)."""
+        scene = context.scene
+        mr = scene.minervha_tex_max_res
+        return {
+            "prefer_jpg": bool(scene.minervha_tex_prefer_jpg),
+            "jpg_quality": int(scene.minervha_tex_jpg_quality),
+            "max_res": None if mr == 'NONE' else int(mr),
+        }
+
     def _execute_materials(self, context, name):
         norms = introspect.collect(context.scene.minervha_scope, _objects_for_scope(context))
         if not norms:
             self.report({'WARNING'}, "No materials in the selected scope")
             return {'CANCELLED'}
-        report = wlsave_export.build_wlsave(norms, name, self.filepath)
+        report = wlsave_export.build_wlsave(norms, name, self.filepath, tex_opts=self._tex_opts(context))
         self.report({'INFO'}, "Built %s — %d materials, %d textures (%d missing)" % (
             self.filepath, len(report['created']),
             len(report['texturesCopied']) + len(report['texturesReExported']),
@@ -129,7 +150,8 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(objs),
                                                 global_scale=world_scale)
         report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
-                                                  position_scale=world_scale, level=level)
+                                                  position_scale=world_scale, level=level,
+                                                  tex_opts=self._tex_opts(context))
         self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV)" % (
             self.filepath, ("map '%s'" % level) if level else "collection",
             len(report['objectsExported']), len(report['meshesWritten']),
@@ -154,7 +176,7 @@ def _popup_report(context, report):
         layout.label(text="Materials created: %d" % len(report['created']))
         layout.label(text="Textures copied: %d" % len(report['texturesCopied']))
         if report['texturesReExported']:
-            layout.label(text="Textures re-exported (PNG): %d" % len(report['texturesReExported']))
+            layout.label(text="Textures re-encoded (JPG/PNG/resized): %d" % len(report['texturesReExported']))
         if report.get('texturesRenamed'):
             layout.label(text="Textures renamed (safe): %d" % len(report['texturesRenamed']))
         if report['texturesMissing']:
@@ -212,6 +234,13 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
             note.label(text="• procedural textures: bake first")
             note.label(text="• verify transforms in-game")
 
+        tex = layout.box()
+        tex.label(text="Textures", icon='TEXTURE')
+        tex.prop(scene, "minervha_tex_prefer_jpg")
+        if scene.minervha_tex_prefer_jpg:
+            tex.prop(scene, "minervha_tex_jpg_quality")
+        tex.prop(scene, "minervha_tex_max_res", text="Max resolution")
+
         layout.separator()
         box = layout.box()
         box.label(text="Wild Life collection (.wlsave)")
@@ -223,11 +252,21 @@ _classes = (MINERVHA_OT_export_wlsave, MINERVHA_PT_exporter)
 
 
 def register():
-    bpy.types.Scene.minervha_export_mode = EnumProperty(name="Mode", items=MODE_ITEMS, default='MATERIALS')
-    bpy.types.Scene.minervha_export_target = EnumProperty(name="Target", items=TARGET_ITEMS, default='COLLECTION')
+    bpy.types.Scene.minervha_export_mode = EnumProperty(name="Mode", items=MODE_ITEMS, default='SCENE')
+    bpy.types.Scene.minervha_export_target = EnumProperty(name="Target", items=TARGET_ITEMS, default='Showroom')
     bpy.types.Scene.minervha_scope = EnumProperty(name="Scope", items=SCOPE_ITEMS, default='SELECTED')
     bpy.types.Scene.minervha_collection = PointerProperty(name="Collection", type=bpy.types.Collection)
     bpy.types.Scene.minervha_wlsave_name = StringProperty(name="Name", default="MyMaterials")
+    bpy.types.Scene.minervha_tex_prefer_jpg = BoolProperty(
+        name="Prefer JPG over PNG", default=True,
+        description="Re-encode opaque textures as JPG (smaller files). Textures with an "
+                    "alpha channel always stay PNG")
+    bpy.types.Scene.minervha_tex_jpg_quality = IntProperty(
+        name="JPG Quality", default=90, min=1, max=100, subtype='PERCENTAGE',
+        description="JPEG compression quality — higher is better quality but larger files")
+    bpy.types.Scene.minervha_tex_max_res = EnumProperty(
+        name="Max Resolution", items=MAX_RES_ITEMS, default='NONE',
+        description="Downscale textures whose longest side exceeds this size (keeps aspect ratio)")
     for cls in _classes:
         bpy.utils.register_class(cls)
 
@@ -236,6 +275,7 @@ def unregister():
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
     for prop in ("minervha_export_mode", "minervha_export_target", "minervha_scope",
-                 "minervha_collection", "minervha_wlsave_name"):
+                 "minervha_collection", "minervha_wlsave_name",
+                 "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)
