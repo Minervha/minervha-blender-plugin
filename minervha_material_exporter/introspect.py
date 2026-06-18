@@ -117,6 +117,22 @@ def normalize_material(mat):
         if s is not None and normal_strength is None:
             normal_strength = float(s.default_value)
 
+    # Active-output-anchored shader walk: the source of truth for the material
+    # `type` / `refraction` (Glass/Refraction/Transparent, linked Alpha/Transmission,
+    # node groups). Prefer its reached-Principled scalars over the legacy loop's
+    # (which reads any Principled in any tree); fall back to a Glass/Refraction node's
+    # Color/Roughness when no Principled drives the surface.
+    walk = bsdf_trace.trace_surface_shaders(mat.node_tree, parent_map)
+    if "BSDF_PRINCIPLED" in walk["shaderTypes"]:
+        alpha = walk["principledAlpha"]
+        transmission = walk["principledTransmission"]
+        if walk["principledIor"] is not None:
+            ior = walk["principledIor"]
+    if base_color is None and walk["refractiveColor"] is not None:
+        base_color = walk["refractiveColor"]
+    if roughness is None and walk["refractiveRoughness"] is not None:
+        roughness = walk["refractiveRoughness"]
+
     tex_list = []
     for tex_node, tree in textures:
         slots = bsdf_trace.trace_from_texture(tex_node, tree, parent_map)
@@ -148,6 +164,14 @@ def normalize_material(mat):
     if alpha_cutoff is not None:
         alpha_cutoff = float(alpha_cutoff)
 
+    # EEVEE-Next blend / refraction signals (corroboration for the type decision).
+    # blend_method is deliberately NOT read — deprecated, defaults HASHED on every
+    # 5.x material. surface_render_method 'BLENDED' is the real alpha-blend signal.
+    surface_render_method = getattr(mat, "surface_render_method", None)
+    raytrace = getattr(mat, "use_raytrace_refraction", None)
+    if raytrace is None:
+        raytrace = getattr(mat, "use_screen_refraction", None)
+
     return {
         "name": mat.name, "skipped": False,
         "objects": bsdf_trace.objects_using_material(mat),
@@ -156,6 +180,14 @@ def normalize_material(mat):
         "normalStrength": normal_strength,
         "specular": specular, "ior": ior, "transmission": transmission, "alpha": alpha,
         "twoSided": two_sided, "alphaCutoff": alpha_cutoff,
+        "surfaceRenderMethod": surface_render_method,
+        "useRaytraceRefraction": (bool(raytrace) if isinstance(raytrace, bool) else None),
+        "shaderTypes": walk["shaderTypes"],
+        "alphaLinked": walk["alphaLinked"],
+        "transmissionLinked": walk["transmissionLinked"],
+        "transmissionStaticValue": walk["transmissionStaticValue"],
+        "refractiveIor": walk["refractiveIor"],
+        "maskedFacMix": walk["maskedFacMix"],
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,
     }
 

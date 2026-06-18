@@ -38,6 +38,14 @@ def _inv_scale(v):
 
 _ALPHA_RE = re.compile(r"^alpha$", re.IGNORECASE)
 
+# Constant (unlinked) Principled Alpha at/above this stays Opaque — kills float
+# noise (0.999) flipping a material to Transparent (owner decision: threshold 0.99).
+_ALPHA_OPAQUE = 0.99
+
+# Terminal shader node.types that are NOT inherently see-through (used to tell a
+# lone Transparent/Translucent surface from one mixed onto an opaque branch).
+_TRANSP_SHADERS = {"BSDF_TRANSPARENT", "BSDF_TRANSLUCENT", "BSDF_GLASS", "BSDF_REFRACTION"}
+
 
 def channel_for_slot(slot):
     """Blender Principled input ("Slots" value) -> Wild Life texture channel."""
@@ -133,21 +141,72 @@ def map_material(norm):
     else:
         color = {"r": 1, "g": 1, "b": 1, "a": 1}
 
-    # type: Transparent (glass — transmission or scalar alpha < 1) wins over
-    # Masked (alpha-cutout texture); else Opaque.
-    transmission = norm.get("transmission") if _is_num(norm.get("transmission")) else 0
-    alpha_scalar = norm.get("alpha") if _is_num(norm.get("alpha")) else 1
-    is_transparent = transmission > 0 or alpha_scalar < 1
-    if is_transparent:
-        mat_type = "Transparent"
-    elif has_alpha:
-        mat_type = "Masked"
-    else:
-        mat_type = "Opaque"
+    # type: classified from the shaders that actually reach the active Material
+    # Output (introspect's trace_surface_shaders), with the legacy Principled
+    # scalars as fallback. First-match-wins; Masked (linked-alpha cutout)
+    # deliberately beats BLENDED/raytrace corroboration, which is never a sole
+    # trigger. See docs/plans/features/material-type-fidelity/plan.md.
+    shaders = set(norm.get("shaderTypes") or [])
+    has_glass = bool(shaders & {"BSDF_GLASS", "BSDF_REFRACTION"})
+    has_transp = bool(shaders & {"BSDF_TRANSPARENT", "BSDF_TRANSLUCENT"})
+    has_opaque_shader = any(s not in _TRANSP_SHADERS for s in shaders)
+    corroboration = (norm.get("surfaceRenderMethod") == "BLENDED") or bool(norm.get("useRaytraceRefraction"))
 
-    # refraction: only meaningful for transparent materials; reading Blender's IOR
-    # (default 1.45) into an opaque material would be wrong, so keep WL's 1.
-    refraction = norm.get("ior") if (is_transparent and _is_num(norm.get("ior"))) else 1
+    transmission = norm.get("transmission") if _is_num(norm.get("transmission")) else 0
+    trans_static = norm.get("transmissionStaticValue")
+    trans_linked = bool(norm.get("transmissionLinked"))
+    alpha_scalar = norm.get("alpha") if _is_num(norm.get("alpha")) else 1
+    alpha_linked = bool(norm.get("alphaLinked"))
+    masked_fac = bool(norm.get("maskedFacMix"))
+
+    trans_active = (
+        transmission > 0
+        or (_is_num(trans_static) and trans_static > 0)
+        or (trans_linked and corroboration)
+    )
+
+    # `refractive` marks transparency that physically bends light (glass /
+    # transmission / alpha-blend) — those get a 1.45 IOR fallback. A pure
+    # Transparent/Translucent BSDF (rule 5) has no IOR socket, so it keeps 1.
+    if has_glass:                                                      # rule 1
+        mat_type, refractive = "Transparent", True
+    elif trans_active:                                                 # rule 2
+        mat_type, refractive = "Transparent", True
+    elif alpha_linked or masked_fac or has_alpha:                      # rule 3
+        mat_type, refractive = "Masked", False
+    elif alpha_scalar < _ALPHA_OPAQUE:                                 # rule 4
+        mat_type, refractive = "Transparent", True
+    elif has_transp and (not has_opaque_shader or corroboration):      # rule 5
+        mat_type, refractive = "Transparent", False
+    else:                                                              # rule 7
+        mat_type, refractive = "Opaque", False
+
+    is_transparent = mat_type == "Transparent"
+
+    # A constant (unlinked) sub-1 Alpha sets the whole-surface opacity.
+    if is_transparent and _is_num(norm.get("alpha")) and alpha_scalar < 1:
+        color["a"] = clamp01(alpha_scalar)
+
+    # refraction: real IOR only when Transparent. Prefer the (group-resolved)
+    # refractive-node IOR, else the Principled IOR; clamp [1,3]. Fallback is 1.45
+    # for refractive transparency, 1 for a non-refractive Transparent BSDF.
+    if is_transparent:
+        ior_src = norm.get("refractiveIor")
+        if not _is_num(ior_src):
+            ior_src = norm.get("ior")
+        if _is_num(ior_src):
+            refraction = min(3.0, max(1.0, ior_src))
+        else:
+            refraction = 1.45 if refractive else 1
+    else:
+        refraction = 1
+
+    if is_transparent and (alpha_linked or masked_fac or has_alpha):
+        report["notes"].append("alpha cutout dropped — refraction/transparency won over Masked")
+    if is_transparent and corroboration and not (has_glass or transmission > 0):
+        report["notes"].append("surface_render_method=BLENDED / raytrace_refraction drove Transparent")
+    if is_transparent and refractive and not _is_num(norm.get("refractiveIor")) and not _is_num(norm.get("ior")):
+        report["notes"].append("refraction defaulted to 1.45 (no static IOR source)")
     # alpha_threshold is 0.0/vestigial under EEVEE-Next; only honor an explicit
     # (> 0) clip threshold, else keep WL's sensible default.
     ac = norm.get("alphaCutoff")

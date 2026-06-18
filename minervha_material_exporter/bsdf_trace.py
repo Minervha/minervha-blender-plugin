@@ -181,3 +181,265 @@ def objects_using_material(mat):
                 result.append(obj.name)
                 break
     return sorted(result)
+
+
+# ---------------------------------------------------------------------------
+# Active-output-anchored surface-shader walk (material type / refraction).
+#
+# scan_tree above collects *every* Principled/texture node in *every* tree;
+# that is correct for gathering textures, but the material `type`
+# (Opaque/Masked/Transparent) and `refraction` must follow only the shaders
+# that actually reach the *active* Material Output's Surface — through
+# Reroute / Mix / Add / node groups. This block adds that walk; it returns a
+# plain dict (no bpy refs) so introspect/mapper stay data-only.
+# See docs/plans/features/material-type-fidelity/plan.md.
+# ---------------------------------------------------------------------------
+
+# Terminal shader node.types we record (anything not a passthrough/mix).
+_PASSTHROUGH = {'REROUTE', 'GROUP', 'GROUP_INPUT', 'GROUP_OUTPUT', 'MIX_SHADER', 'ADD_SHADER'}
+
+
+def _socket_scalar(socket):
+    """A socket's scalar default (float), or None for color/vector/unreadable."""
+    try:
+        v = socket.default_value
+    except AttributeError:
+        return None
+    if hasattr(v, '__len__'):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _socket_color(socket):
+    """A socket's RGBA default as {r,g,b,a}, or None if not a color/vector socket."""
+    try:
+        v = socket.default_value
+    except AttributeError:
+        return None
+    if not hasattr(v, '__len__') or len(v) < 3:
+        return None
+    return {"r": v[0], "g": v[1], "b": v[2], "a": v[3] if len(v) > 3 else 1}
+
+
+def _resolve_input(socket, tree, parent_map):
+    """Classify what drives an input socket.
+
+    Returns ``(dynamic, value)``:
+      * ``dynamic=True``  -> a spatially-varying / non-static source (texture, ramp,
+        math, fresnel, ...) drives it; ``value`` is None.
+      * ``dynamic=False`` -> it resolves to a constant; ``value`` is that float
+        (its own default, or an upstream Value node, chased through Reroute /
+        Group Input one branch at a time).
+    """
+    cur, ctree = socket, tree
+    seen = set()
+    while True:
+        if not cur.is_linked:
+            return (False, _socket_scalar(cur))
+        key = (id(ctree), id(cur))
+        if key in seen:
+            return (True, None)
+        seen.add(key)
+        link = cur.links[0]
+        src, fsock = link.from_node, link.from_socket
+        if src.type == 'REROUTE':
+            cur = src.inputs[0]
+            continue
+        if src.type == 'VALUE':
+            try:
+                return (False, float(src.outputs[0].default_value))
+            except (AttributeError, TypeError, ValueError):
+                return (True, None)
+        if src.type == 'GROUP_INPUT':
+            idx = next((i for i, o in enumerate(src.outputs) if o == fsock), None)
+            parents = parent_map.get(ctree, [])
+            if idx is not None and parents:
+                p_node, p_tree = parents[0]
+                if idx < len(p_node.inputs):
+                    cur, ctree = p_node.inputs[idx], p_tree
+                    continue
+            return (True, None)
+        return (True, None)
+
+
+def find_active_output(tree):
+    """The Material Output that drives the render: prefer an EEVEE/ALL-targeted one
+    (the plugin targets EEVEE-Next — a Cycles-only output must not win), then the
+    active flag, then the first. None if the tree has no Material Output."""
+    outs = [n for n in tree.nodes if n.type == 'OUTPUT_MATERIAL']
+    if not outs:
+        return None
+    pool = [n for n in outs if getattr(n, 'target', 'ALL') in ('EEVEE', 'ALL')] or outs
+    for n in pool:
+        if getattr(n, 'is_active_output', False):
+            return n
+    return pool[0]
+
+
+def _active_group_output(node_tree):
+    """The live GROUP_OUTPUT inside a node group (active flag, else first). None if
+    the group exposes no output — iterating *every* GROUP_OUTPUT would pull shaders
+    from a dead/inactive output and mis-classify the material."""
+    gos = [n for n in node_tree.nodes if n.type == 'GROUP_OUTPUT']
+    if not gos:
+        return None
+    for n in gos:
+        if getattr(n, 'is_active_output', False):
+            return n
+    return gos[0]
+
+
+def _read_principled(node, tree, parent_map, out):
+    """Record the first reached Principled's Alpha / Transmission / IOR (resolved)."""
+    if out["_principledReached"]:
+        return  # first reached wins (mirrors introspect's first-unlinked-wins)
+    out["_principledReached"] = True
+    alpha_in = node.inputs.get('Alpha')
+    if alpha_in is not None:
+        dyn, val = _resolve_input(alpha_in, tree, parent_map)
+        if dyn:
+            out["alphaLinked"] = True
+        else:
+            out["principledAlpha"] = val
+    trans_in = node.inputs.get('Transmission Weight') or node.inputs.get('Transmission')
+    if trans_in is not None:
+        dyn, val = _resolve_input(trans_in, tree, parent_map)
+        if dyn:
+            out["transmissionLinked"] = True
+        else:
+            out["principledTransmission"] = val
+            out["transmissionStaticValue"] = val
+    ior_in = node.inputs.get('IOR')
+    if ior_in is not None:
+        dyn, val = _resolve_input(ior_in, tree, parent_map)
+        if not dyn:
+            out["principledIor"] = val
+
+
+def _read_refractive(node, tree, parent_map, out):
+    """Record a Glass/Refraction node's IOR / Color / Roughness (group-resolved IOR)."""
+    if out["refractiveIor"] is None:
+        ior_in = node.inputs.get('IOR')
+        if ior_in is not None:
+            _dyn, val = _resolve_input(ior_in, tree, parent_map)
+            if val is not None:
+                out["refractiveIor"] = val
+    if out["refractiveColor"] is None:
+        c = node.inputs.get('Color')
+        if c is not None:
+            out["refractiveColor"] = _socket_color(c)
+    if out["refractiveRoughness"] is None:
+        r = node.inputs.get('Roughness')
+        if r is not None:
+            _dyn, val = _resolve_input(r, tree, parent_map)
+            if val is not None:
+                out["refractiveRoughness"] = val
+
+
+def trace_surface_shaders(mat_tree, parent_map):
+    """Walk backward from the active Material Output's Surface, through Reroute /
+    Mix / Add / GROUP / GROUP_INPUT / GROUP_OUTPUT, collecting the effective shader
+    set and the transparency-relevant signals. Returns a plain (bpy-free) dict."""
+    out = {
+        "shaderTypes": [],
+        "alphaLinked": False,
+        "transmissionLinked": False,
+        "transmissionStaticValue": None,
+        "refractiveIor": None,
+        "refractiveColor": None,
+        "refractiveRoughness": None,
+        "maskedFacMix": False,
+        # internal scalars introspect prefers over the legacy (unanchored) reads:
+        "_principledReached": False,
+        "principledAlpha": None,
+        "principledTransmission": None,
+        "principledIor": None,
+    }
+    output = find_active_output(mat_tree)
+    surf = output.inputs.get('Surface') if output else None
+    if not surf or not surf.is_linked:
+        out.pop("_principledReached", None)
+        return out
+
+    shader_types = set()
+    has_linked_fac_mix = False
+    stack = [(surf, mat_tree)]
+    visited = set()
+    while stack:
+        socket, tree = stack.pop()
+        key = (id(tree), id(socket))
+        if key in visited:
+            continue
+        visited.add(key)
+        for link in socket.links:
+            node = link.from_node
+            t = node.type
+            if t == 'REROUTE':
+                if node.inputs and node.inputs[0].is_linked:
+                    stack.append((node.inputs[0], tree))
+                continue
+            if t == 'GROUP' and node.node_tree:
+                go = _active_group_output(node.node_tree)
+                if go:
+                    idx = next((i for i, o in enumerate(node.outputs) if o == link.from_socket), None)
+                    if idx is not None and idx < len(go.inputs) and go.inputs[idx].is_linked:
+                        stack.append((go.inputs[idx], node.node_tree))
+                continue
+            if t == 'GROUP_INPUT':
+                idx = next((i for i, o in enumerate(node.outputs) if o == link.from_socket), None)
+                if idx is not None:
+                    for p_node, p_tree in parent_map.get(tree, []):
+                        if idx < len(p_node.inputs) and p_node.inputs[idx].is_linked:
+                            stack.append((p_node.inputs[idx], p_tree))
+                continue
+            if t == 'GROUP_OUTPUT':
+                continue
+            if t == 'MIX_SHADER':
+                fac = node.inputs[0] if len(node.inputs) > 0 else None
+                in1 = node.inputs[1] if len(node.inputs) > 1 else None
+                in2 = node.inputs[2] if len(node.inputs) > 2 else None
+                fdyn, fval = _resolve_input(fac, tree, parent_map) if fac is not None else (False, 0.5)
+                if fdyn:
+                    has_linked_fac_mix = True
+                    if in1 and in1.is_linked:
+                        stack.append((in1, tree))
+                    if in2 and in2.is_linked:
+                        stack.append((in2, tree))
+                else:
+                    fv = fval if fval is not None else 0.5
+                    if fv < 1.0 and in1 and in1.is_linked:
+                        stack.append((in1, tree))
+                    if fv > 0.0 and in2 and in2.is_linked:
+                        stack.append((in2, tree))
+                continue
+            if t == 'ADD_SHADER':
+                for ai in (node.inputs[0] if len(node.inputs) > 0 else None,
+                           node.inputs[1] if len(node.inputs) > 1 else None):
+                    if ai and ai.is_linked:
+                        stack.append((ai, tree))
+                continue
+            # terminal shader node
+            shader_types.add(t)
+            if t == 'BSDF_PRINCIPLED':
+                _read_principled(node, tree, parent_map, out)
+            elif t in ('BSDF_GLASS', 'BSDF_REFRACTION'):
+                _read_refractive(node, tree, parent_map, out)
+            elif t in ('BSDF_TRANSPARENT', 'BSDF_TRANSLUCENT'):
+                if out["refractiveColor"] is None:
+                    c = node.inputs.get('Color')
+                    if c is not None:
+                        out["refractiveColor"] = _socket_color(c)
+
+    # A linked-Fac Mix that gates a transparent-ish branch against an opaque one is a
+    # per-pixel cutout -> Masked (rule 3). A Glass branch still wins Transparent in the
+    # mapper (rule 1 is tested first), per the documented owner decision.
+    transp_ish = bool(shader_types & {'BSDF_TRANSPARENT', 'BSDF_TRANSLUCENT', 'BSDF_GLASS', 'BSDF_REFRACTION'})
+    has_opaque = any(s not in {'BSDF_TRANSPARENT', 'BSDF_TRANSLUCENT', 'BSDF_GLASS', 'BSDF_REFRACTION'}
+                     for s in shader_types)
+    out["maskedFacMix"] = has_linked_fac_mix and transp_ish and has_opaque
+    out["shaderTypes"] = sorted(shader_types)
+    out.pop("_principledReached", None)
+    return out
