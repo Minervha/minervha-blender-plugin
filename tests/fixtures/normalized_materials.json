@@ -503,5 +503,27 @@
       { "name": "BrickNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/BrickNormal.png", "basename": "BrickNormal.png",
         "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 2, "y": 2, "z": 1 } } }
     ]
+  },
+  {
+    "name": "FlipGreenOff",
+    "skipped": false,
+    "baseColor": { "r": 0.5, "g": 0.5, "b": 0.5, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "flipGreen": false,
+    "textures": []
+  },
+  {
+    "name": "LossyAniso",
+    "skipped": false,
+    "baseColor": { "r": 0.5, "g": 0.5, "b": 0.5, "a": 1 },
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "lossyFeatures": ["anisotropy", "coat"],
+    "textures": []
   }
 ]

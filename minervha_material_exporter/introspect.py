@@ -49,6 +49,23 @@ def _color(value):
     return {"r": value[0], "g": value[1], "b": value[2], "a": value[3]}
 
 
+def _input_active(node, names, thr=1e-4):
+    """True if any of the named inputs on `node` is linked or has a default above `thr`
+    (used to detect Principled features the flat WL struct cannot carry)."""
+    for nm in names:
+        s = node.inputs.get(nm)
+        if s is None:
+            continue
+        if s.is_linked:
+            return True
+        try:
+            if float(s.default_value) > thr:
+                return True
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
 def normalize_material(mat):
     """Build one NormalizedMaterial dict (blenderParse.js shape) for a Blender material."""
     if not (mat.use_nodes and mat.node_tree):
@@ -228,6 +245,16 @@ def normalize_material(mat):
     if "Normal" not in slot_set and _input_linked("Normal"):
         dynamic_channels.append("normal")
 
+    # Irreducible losses: Principled features with no WL slot (not even via baking).
+    lossy_features = []
+    for p_node, _ in principled:
+        if "anisotropy" not in lossy_features and _input_active(p_node, ("Anisotropic",)):
+            lossy_features.append("anisotropy")
+        if "coat" not in lossy_features and _input_active(p_node, ("Coat Weight", "Coat", "Clearcoat")):
+            lossy_features.append("coat")
+        if "sheen" not in lossy_features and _input_active(p_node, ("Sheen Weight", "Sheen")):
+            lossy_features.append("sheen")
+
     return {
         "name": mat.name, "skipped": False,
         "objects": bsdf_trace.objects_using_material(mat),
@@ -247,6 +274,7 @@ def normalize_material(mat):
         "projectionMapped": projection_mapped,
         "consumedByNoUvObject": False,  # set by collect() once object context is known
         "dynamicChannels": dynamic_channels,
+        "lossyFeatures": lossy_features,
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,
     }
 

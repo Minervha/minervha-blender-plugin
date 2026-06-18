@@ -47,6 +47,8 @@ _SEMANTIC = {
     "UdimDiffuse":           {"bake": [("diffuse", "udim")]},
     "ProceduralDiffuse":     {"bake": [("diffuse", "procedural")]},
     "BakedDiffuse":          {"tiling_identity": True},
+    "FlipGreenOff":          {"flip_green": False},
+    "LossyAniso":            {"note_sub": "anisotropy"},
 }
 
 
@@ -66,6 +68,8 @@ def run_semantic():
             fails.append((name, f"bIsTriplanar={entry['bIsTriplanar']!r} expected {checks['triplanar']!r}"))
         if checks.get("tiling_identity") and entry["textureTiling"] != {"x": 1, "y": 1, "z": 1}:
             fails.append((name, f"textureTiling={entry['textureTiling']} expected identity (baked diffuse)"))
+        if "flip_green" in checks and entry["bFlipGreenChannel"] is not checks["flip_green"]:
+            fails.append((name, f"bFlipGreenChannel={entry['bFlipGreenChannel']!r} expected {checks['flip_green']!r}"))
         for ch, reason in checks.get("bake", []):
             if {"channel": ch, "reason": reason} not in report["bakeCandidates"]:
                 fails.append((name, f"missing bakeCandidate ({ch},{reason}); have {report['bakeCandidates']}"))

@@ -134,6 +134,12 @@ def map_material(norm):
             report["notes"].append(f"{ch}: driven by a procedural / node graph — bake to flatten")
             _bake_candidate(ch, "procedural")
 
+    # Irreducible losses: shader features the flat WL struct has no slot for (anisotropy,
+    # coat, sheen, true geometric displacement, ...). introspect detects them; surface each
+    # so the user knows it was dropped (there is no faithful target, not even via baking).
+    for feat in (norm.get("lossyFeatures") or []):
+        report["notes"].append(f"{feat} — no WL equivalent, dropped")
+
     # ORM/MRAO: the same source image landing in two channels (e.g. a Separate Color
     # feeding metallic + roughness from one packed map) is not independent. First-wins
     # kept it in each channel as-is; flag it so the user can bake to split the channels.
@@ -311,7 +317,7 @@ def map_material(norm):
         "textureOffset": {"x": offset["x"], "y": offset["y"], "z": offset["z"]} if offset else {"x": 0, "y": 0, "z": 0},
         "bIsTriplanar": triplanar,
         "bIsTwoSided": two_sided,
-        "bFlipGreenChannel": True,
+        "bFlipGreenChannel": bool(norm.get("flipGreen", True)),
         "textureRandomness": 0,
         "surfaceType": "SurfaceType_Default",
         "textureMovement": {"x": 0, "y": 0, "z": 0},

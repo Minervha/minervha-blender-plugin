@@ -133,6 +133,14 @@ def _make_material_baker(objs, tex_dir, resolution):
     return baker
 
 
+def _annotate_flip(context, norms):
+    """Stamp the green-flip preference onto each normalized material (mapper reads `flipGreen`,
+    defaulting True = WL/DirectX). One export-wide toggle, not per-material."""
+    fg = bool(context.scene.minervha_flip_green)
+    for n in norms:
+        n["flipGreen"] = fg
+
+
 def _objects_for_scope(context):
     scope = context.scene.minervha_scope
     if scope == 'SELECTED':
@@ -197,6 +205,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         if not norms:
             self.report({'WARNING'}, "No materials in the selected scope")
             return {'CANCELLED'}
+        _annotate_flip(context, norms)
         report = wlsave_export.build_wlsave(norms, name, self.filepath, tex_opts=self._tex_opts(context))
         self.report({'INFO'}, "Built %s — %d materials, %d textures (%d missing)" % (
             self.filepath, len(report['created']),
@@ -211,6 +220,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             self.report({'WARNING'}, "No objects in the selected scope")
             return {'CANCELLED'}
         norms = _scene_materials(objs)
+        _annotate_flip(context, norms)
         norm_objects = scene_introspect.collect(context.scene.minervha_scope, objs)
         if not norm_objects:
             self.report({'WARNING'}, "No exportable objects (meshes/empties) in scope")
@@ -330,6 +340,7 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         if scene.minervha_tex_prefer_jpg:
             tex.prop(scene, "minervha_tex_jpg_quality")
         tex.prop(scene, "minervha_tex_max_res", text="Max resolution")
+        tex.prop(scene, "minervha_flip_green")
         if scene_mode:
             tex.separator()
             tex.prop(scene, "minervha_bake")
@@ -370,6 +381,11 @@ def register():
     bpy.types.Scene.minervha_bake_res = EnumProperty(
         name="Bake Resolution", items=BAKE_RES_ITEMS, default='2048',
         description="Resolution of the baked PBR textures")
+    bpy.types.Scene.minervha_flip_green = BoolProperty(
+        name="Flip normal green (DirectX)", default=True,
+        description="Wild Life reads DirectX-convention normal maps (green channel flipped). "
+                    "Leave on for OpenGL-authored normals (the Blender default); turn off if your "
+                    "normal maps are already DirectX")
     for cls in _classes:
         bpy.utils.register_class(cls)
 
@@ -380,6 +396,6 @@ def unregister():
     for prop in ("minervha_export_mode", "minervha_export_target", "minervha_scope",
                  "minervha_collection", "minervha_wlsave_name",
                  "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res",
-                 "minervha_bake", "minervha_bake_res"):
+                 "minervha_bake", "minervha_bake_res", "minervha_flip_green"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

@@ -40,7 +40,14 @@ mapping; **Scene mode only** — baking needs an object+UV); `ui.py` adds the **
 resolution (Scene mode), builds the baker over the in-scope objects (only meshes that *already* have UVs, to
 stay non-destructive), and reports baked-channel counts. End-to-end live: a Noise→Base Color/Roughness
 material bakes 2 PNGs into the `.wlsave`, channel paths filled, tiling identity, render state restored.
-Phase 3 polish (green-flip toggle, UV-bounds tiling, lossy report) pending.
+
+**Shading compatibility — Phase 3 (polish, validated live Blender 5.1.2).** `bFlipGreenChannel` is now an
+export toggle: `ui.py` adds **Flip normal green (DirectX)** (default True), stamps `flipGreen` onto every norm
+via `_annotate_flip`, and `mapper.py` reads `norm.get("flipGreen", True)`. `introspect.py` flags
+**`lossyFeatures`** (anisotropy / coat / sheen — Principled inputs the flat struct cannot carry) which
+`mapper.py` surfaces as "no WL equivalent, dropped" notes. **Deferred:** UV-bounds tiling inference (a fragile
+niche heuristic — see plan chunk-08). The MASTER addendum (chunk-09) is flagged for owner sign-off (not yet
+applied).
 
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
