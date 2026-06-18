@@ -99,8 +99,10 @@ def test_seed_rotation_about_blender_z():
 def test_geom_constraint():
     Bg4 = T.geom_matrix()
     Bg = tuple(tuple(Bg4[r][c] for c in range(3)) for r in range(3))
-    assert T.mat3_mul(T.WL_BASIS["C_obj"], Bg) == T.WL_BASIS["B"]     # C_obj · B_geom == B
-    assert T.geom_is_mirrored() == (T.det3(T.WL_BASIS["B"]) < 0)
+    assert T.mat3_mul(T.WL_BASIS["C_obj"], Bg) == T.WL_BASIS["B"]     # C_obj · B_geom == B (rotated props ok)
+    assert Bg == ((1, 0, 0), (0, -1, 0), (0, 0, -1))                   # the known-good (x,-y,-z) geometry
+    assert T.det3(Bg) == 1                                             # proper rotation -> exporter handles normals
+    assert T.geom_is_mirrored() is False                              # so no winding reversal / normal skip
     assert Bg4[0][3] == 0.0 and Bg4[3][3] == 1.0                       # no translation in the bake
 
 

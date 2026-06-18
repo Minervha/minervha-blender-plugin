@@ -5,12 +5,15 @@ The WHOLE axis / sign / handedness / rotator convention lives in one declarative
 linear algebra. Calibration (the rig + corpus, see the coordinate-transform plan) edits
 only `WL_BASIS`.
 
-Why a single change of basis: Blender is right-handed, Z-up, metres; the game is
-left-handed and (per in-game observation) Y-up, centimetres. A correct conversion is one
-change of basis `B` applied consistently — position `B·p`, rotation `B·R·Bᵀ`, scale by the
-axis permutation — never three ad-hoc fixes. Geometry travels a second path (the game's OBJ
-importer, convention `C_obj`), so the matrix baked into the OBJ is *derived*:
-`B_geom = C_objᵀ·B` (so `C_obj·B_geom = B`). The geometry mirror is therefore `det(B)`.
+Why a single change of basis: Blender is right-handed, Z-up, metres; the game (Unreal) is
+left-handed, Z-up (corpus-measured), centimetres. A correct conversion is one change of basis
+`B` applied consistently — position `B·p`, rotation `B·R·Bᵀ`, scale by the axis permutation —
+never three ad-hoc fixes. Geometry travels a second path (the game's OBJ importer, convention
+`C_obj`), so the matrix baked into the OBJ is *derived*: `B_geom = C_objᵀ·B` (so `C_obj·B_geom = B`,
+which keeps rotated/off-origin props correct). `C_obj` is itself a reflection (the OBJ importer flips
+handedness), so `B_geom` comes out a PROPER rotation (det +1): the exporter then writes a well-formed
+OBJ (winding + normals consistent) that the game imports correctly — no winding/normal hackery. The
+winding flip is needed only if OUR bake is itself a reflection, so it keys on `det(B_geom)`.
 
 Pure: no `bpy`, no numpy — runs/tests outside Blender, like `mapper.py` / `prop_mapper.py`.
 Blender's euler convention is reproduced exactly: `Euler(e, "XYZ").to_matrix() == Rz·Ry·Rx`
@@ -30,11 +33,13 @@ WL_BASIS = {
     "B": ((1, 0, 0),
           (0, -1, 0),
           (0, 0, 1)),
-    # C_obj: the game's OBJ-importer convention (MEASURED; seed = identity, verts used as-is).
-    # B_geom is DERIVED as C_objᵀ·B — never edited directly.
+    # C_obj: the game's OBJ-importer convention (MEASURED in-game). The geometry must be pre-rotated
+    # (x,-y,-z) to import upright (the historical 180°-about-X), so given B this is C_obj = diag(1,1,-1)
+    # (the importer flips Z). B_geom is DERIVED as C_objᵀ·B = diag(1,-1,-1) (a proper rotation) — never
+    # edited directly. Seeded diag(1,1,-1) was wrong (geometry came in upside-down + broken normals).
     "C_obj": ((1, 0, 0),
               (0, 1, 0),
-              (0, 0, 1)),
+              (0, 0, -1)),
     # Game euler rotator (Unreal FRotator): roll about X, pitch about Y, yaw about Z (the up axis —
     # corpus-confirmed). Order/signs are the seed; the rig pins the signs.
     "rotator_axis": {"roll": "x", "pitch": "y", "yaw": "z"},
@@ -156,6 +161,8 @@ def geom_matrix(basis=WL_BASIS):
 
 
 def geom_is_mirrored(basis=WL_BASIS):
-    """True if the in-world geometry is mirrored -> obj_export must reverse face winding.
-    Keyed on det(B) (== det(C_obj·B_geom)), NOT det(B_geom) in isolation."""
-    return det3(basis["B"]) < 0
+    """True if the BAKED geometry (B_geom) is itself a reflection -> obj_export must reverse face winding
+    and skip normals to keep the written OBJ well-formed. Keyed on det(B_geom): when C_obj makes B_geom a
+    proper rotation (the normal case), this is False and the exporter handles winding/normals itself."""
+    Bg = mat3_mul(transpose3(basis["C_obj"]), basis["B"])
+    return det3(Bg) < 0
