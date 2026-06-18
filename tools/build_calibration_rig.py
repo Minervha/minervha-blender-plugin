@@ -39,6 +39,9 @@ OUT_PATH = os.path.join(os.path.dirname(_HERE), "dist", "CalibRig.wlsave")
 COLL = "CalibRig"
 
 
+_MESH_PREFIXES = ("AxisX", "AxisY", "AxisZ", "ChiralR")
+
+
 def _clear_previous():
     coll = bpy.data.collections.get(COLL)
     if coll:
@@ -48,6 +51,13 @@ def _clear_previous():
     for m in list(bpy.data.materials):
         if m.name.startswith("CalibRig_"):
             bpy.data.materials.remove(m)
+    # purge orphan mesh/curve datablocks from a prior run so names don't accrue .001 suffixes.
+    for me in list(bpy.data.meshes):
+        if me.users == 0 and me.name.startswith(_MESH_PREFIXES):
+            bpy.data.meshes.remove(me)
+    for cu in list(bpy.data.curves):
+        if cu.users == 0 and cu.name.startswith("CalibRig_R"):
+            bpy.data.curves.remove(cu)
 
 
 def _mat(name, rgba):

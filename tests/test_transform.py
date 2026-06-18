@@ -37,9 +37,9 @@ def test_key_order():
 
 
 def test_seed_up_axis_and_scale_factor():
-    # The headline behavior, tied to WL_BASIS: Blender up (+Z) -> game up (+Y), scaled by position_scale.
+    # The headline behavior, tied to WL_BASIS (corpus: Z-up): Blender up (+Z) -> game up (+Z), x100.
     t = prop_mapper.blender_to_wl_transform((0, 0, 1), (0, 0, 0), "XYZ", (1, 1, 1), position_scale=100.0)
-    assert t["position"] == {"x": 0, "y": 100.0, "z": 0}
+    assert t["position"] == {"x": 0, "y": 0, "z": 100.0}
 
 
 def test_identity_rotation_is_zero():

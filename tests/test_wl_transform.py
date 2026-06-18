@@ -61,15 +61,16 @@ def test_scale_factor_on_position_only():
     assert t["rotation"] == {"pitch": 0.0, "yaw": 0.0, "roll": 0.0}
 
 
-def test_seed_basis_swaps_up_axis():
-    # Blender up (+Z) -> game up (+Y); Blender depth (+Y) -> game +Z.
-    assert T.object_transform((0, 0, 5), (0, 0, 0), "XYZ", (1, 1, 1))["position"] == {"x": 0, "y": 5, "z": 0}
-    assert T.object_transform((0, 7, 0), (0, 0, 0), "XYZ", (1, 1, 1))["position"] == {"x": 0, "y": 0, "z": 7}
+def test_seed_basis_negates_y():
+    # Corpus convention: Z stays up (Z->Z), Blender Y is negated (handedness flip), X passes through.
+    assert T.object_transform((0, 0, 5), (0, 0, 0), "XYZ", (1, 1, 1))["position"] == {"x": 0, "y": 0, "z": 5}
+    assert T.object_transform((0, 7, 0), (0, 0, 0), "XYZ", (1, 1, 1))["position"] == {"x": 0, "y": -7, "z": 0}
+    assert T.object_transform((3, 0, 0), (0, 0, 0), "XYZ", (1, 1, 1))["position"] == {"x": 3, "y": 0, "z": 0}
 
 
-def test_scale_follows_permutation():
-    # tall in Blender Z -> tall in game Y (the up axis).
-    assert T.object_transform((0, 0, 0), (0, 0, 0), "XYZ", (1, 1, 9))["scale"] == {"x": 1, "y": 9, "z": 1}
+def test_scale_unaffected_by_sign_flip():
+    # |B| = identity for negate-Y, so scale magnitudes pass straight through.
+    assert T.object_transform((0, 0, 0), (0, 0, 0), "XYZ", (2, 3, 9))["scale"] == {"x": 2, "y": 3, "z": 9}
 
 
 def test_det_and_orthonormality():
@@ -80,16 +81,17 @@ def test_det_and_orthonormality():
 
 
 def test_single_axis_rotation_conjugation():
-    # A +90° Blender-Z rotation, conjugated by the seed B (det -1), is a -90° rotation about game up (Y).
+    # A +90° Blender-Z rotation, conjugated by the seed B (negate-Y, det -1), is a -90° rotation about
+    # game up (Z) — the negate-Y flips the yaw sign.
     B = T.WL_BASIS["B"]
     R = T.euler_to_mat3((0, 0, math.pi / 2), "XYZ")
     R_game = T.mat3_mul(T.mat3_mul(B, R), T.transpose3(B))
-    assert _mat_close(R_game, T.euler_to_mat3((0, -math.pi / 2, 0), "XYZ"))
+    assert _mat_close(R_game, T.euler_to_mat3((0, 0, -math.pi / 2), "XYZ"))
     assert _approx(T.det3(R_game), 1.0)         # conjugation of a proper rotation stays proper
 
 
 def test_seed_rotation_about_blender_z():
-    # End-to-end: same +90° Blender-Z rotation -> game yaw -90 about the up axis, pitch/roll 0.
+    # End-to-end: a +90° Blender-Z rotation -> game yaw -90 about the up axis (Z), pitch/roll 0.
     t = T.object_transform((0, 0, 0), (0, 0, math.pi / 2), "XYZ", (1, 1, 1))
     assert t["rotation"] == {"pitch": 0.0, "yaw": -90.0, "roll": 0.0}
 

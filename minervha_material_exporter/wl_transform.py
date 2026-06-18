@@ -19,24 +19,27 @@ Blender's euler convention is reproduced exactly: `Euler(e, "XYZ").to_matrix() =
 
 import math
 
-# --- The convention. THEORY SEED — calibrated in-game via the rig (see plan chunk-04). ---
+# --- The convention. CORPUS-SEEDED — signs/C_obj pinned in-game via the rig (see plan chunk-04). ---
 # B: rows = game (x,y,z), cols = Blender (x,y,z); B[g][b] = ±1 means game axis g = ±Blender axis b.
-# Seed: game X = +Blender X, game Y(up) = +Blender Z, game Z(depth) = +Blender Y  ->  det(B) = -1
-# (right-handed Blender -> left-handed game; matches the observed "+Y is up").
+# Measured from 855 real characters + 92 880 props (tools/analyze_save_corpus.py): the save is
+# Z-UP (the z coordinate clusters at floor heights; x/y span the whole map) with YAW about Z. Both
+# Blender and the game are therefore Z-up — the up axis maps Z->Z. The right-handed -> left-handed
+# flip (Blender RH -> Unreal LH) is the textbook NEGATE-Y: game X=+Blender X, Y=-Blender Y, Z=+Blender Z,
+# det(B) = -1. (Whether it is negate-Y or negate-X, and the rotator signs, are confirmed by the rig.)
 WL_BASIS = {
     "B": ((1, 0, 0),
-          (0, 0, 1),
-          (0, 1, 0)),
+          (0, -1, 0),
+          (0, 0, 1)),
     # C_obj: the game's OBJ-importer convention (MEASURED; seed = identity, verts used as-is).
     # B_geom is DERIVED as C_objᵀ·B — never edited directly.
     "C_obj": ((1, 0, 0),
               (0, 1, 0),
               (0, 0, 1)),
-    # Game euler rotator: which game axis each channel rotates about, the extraction order, per-channel sign.
-    # Seed: yaw about the up axis (game Y), pitch about X, roll about Z. Pinned by the rig.
-    "rotator_axis": {"yaw": "y", "pitch": "x", "roll": "z"},
+    # Game euler rotator (Unreal FRotator): roll about X, pitch about Y, yaw about Z (the up axis —
+    # corpus-confirmed). Order/signs are the seed; the rig pins the signs.
+    "rotator_axis": {"roll": "x", "pitch": "y", "yaw": "z"},
     "rotator_order": "XYZ",
-    "rotator_sign": {"yaw": 1, "pitch": 1, "roll": 1},
+    "rotator_sign": {"roll": 1, "pitch": 1, "yaw": 1},
 }
 
 _IDENTITY3 = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
