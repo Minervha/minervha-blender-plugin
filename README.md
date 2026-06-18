@@ -4,7 +4,7 @@ Blender extension that exports a Blender scene's materials to **Wild Life** as a
 **collection bundle** (`.wlsave`) — the collection's JSON plus all its textures, ready to install via
 **Minervha Studio**.
 
-> 🚧 Early release — functional end-to-end; in-game verification on large scenes still in progress.
+> Early release: functional end-to-end; in-game verification on large scenes still in progress.
 
 ## Compatibility
 
