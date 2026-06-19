@@ -47,15 +47,34 @@ def can_bake():
     return bpy is not None and "cycles" in bpy.context.preferences.addons
 
 
+def _gpu_available():
+    """True if Cycles has a configured, enabled non-CPU compute device (CUDA/OPTIX/HIP/...).
+    Lets the bake run on the GPU instead of the CPU when the user has one set up in Preferences."""
+    cprefs = bpy.context.preferences.addons.get("cycles")
+    if not cprefs:
+        return False
+    cp = cprefs.preferences
+    if getattr(cp, "compute_device_type", "NONE") in (None, "NONE"):
+        return False
+    try:
+        cp.refresh_devices()
+    except Exception:
+        pass
+    return any(getattr(d, "use", False) and d.type != "CPU" for d in getattr(cp, "devices", []))
+
+
 @contextmanager
 def bake_environment(samples=1):
     """Swap to CYCLES with flat-pass settings, restoring ALL touched render/scene state on exit.
-    Bake passes here are unlit, so 1 sample + no denoise is enough and fast."""
+    Bake passes here are unlit, so 1 sample + no denoise is enough and fast. Bakes on the **GPU**
+    when one is configured (the scene's Cycles device is usually CPU) — a big speedup for a
+    bake-heavy export, and the only place the export touches the GPU at all."""
     scene = bpy.context.scene
     snap = {
         "engine": scene.render.engine,
         "samples": scene.cycles.samples,
         "denoise": scene.cycles.use_denoising,
+        "device": scene.cycles.device,
         "active": bpy.context.view_layer.objects.active,
         "selected": list(bpy.context.selected_objects),
     }
@@ -63,11 +82,14 @@ def bake_environment(samples=1):
         scene.render.engine = "CYCLES"
         scene.cycles.samples = samples
         scene.cycles.use_denoising = False
+        if _gpu_available():
+            scene.cycles.device = "GPU"               # offload the bake to the GPU when available
         yield
     finally:
         scene.render.engine = snap["engine"]          # restore the LITERAL engine id
         scene.cycles.samples = snap["samples"]
         scene.cycles.use_denoising = snap["denoise"]
+        scene.cycles.device = snap["device"]
         try:
             bpy.ops.object.select_all(action="DESELECT")
             for o in snap["selected"]:

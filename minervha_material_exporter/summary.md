@@ -160,6 +160,17 @@ textures were already correct (kept PNG by `_image_facts` depth) — only the ba
 / `plant_03` bake an RGBA PNG with a real mask (alpha min 0 / max 1 / mean ~0.34) instead of a flat JPG.
 Tests: `test_texture_options.py` adds `_material_uses_alpha` cases.
 
+**Bake on GPU + export throughput (validated live Blender 5.1.2).** An export used ~1 core's worth of CPU
+and no GPU: the geometry pass is 7682 sequential `wm.obj_export` calls orchestrated single-threaded (bpy is
+not thread-safe — Blender threads each call internally but they can't be issued in parallel), and the bake ran
+on the **CPU** (`scene.cycles.device` is usually CPU even when a GPU is configured). `bake.bake_environment`
+now switches Cycles to the **GPU** when one is enabled (`bake._gpu_available`, snapshotted/restored like the
+engine) — the only GPU-touching phase, a large win for a bake-heavy export. `ui` raises the modal pump budget
+to 50 ms (`_PUMP_BUDGET`) so fewer heavy-scene viewport redraws happen between chunks (more useful work per
+tick, still ~20 progress updates/sec). Live: device CPU→GPU during bake, restored after. (The geometry pass
+stays single-thread-orchestrated — parallelising it would mean replacing the in-game-calibrated `wm.obj_export`
+path, deferred.)
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);

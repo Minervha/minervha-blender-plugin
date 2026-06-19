@@ -429,8 +429,13 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
                 return self._finish(context)
         return {'RUNNING_MODAL'}
 
+    # Work budget per timer tick. Bigger = fewer viewport redraws between chunks (the redraw of a
+    # heavy scene is pure overhead during export) → faster, more useful CPU; smaller = smoother UI.
+    # 50 ms keeps ~20 progress updates/sec (Esc still responsive) while cutting redraw waste.
+    _PUMP_BUDGET = 0.05
+
     def _pump(self, context):
-        """Advance the build generator within a ~20 ms budget; True when it's done."""
+        """Advance the build generator within the per-tick budget; True when it's done."""
         t0 = time.monotonic()
         while True:
             try:
@@ -441,7 +446,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             if self._phase not in self._phase_start:
                 self._phase_start[self._phase] = time.monotonic() - self._t_start
                 self._phase_order.append(self._phase)
-            if time.monotonic() - t0 > 0.02:
+            if time.monotonic() - t0 > self._PUMP_BUDGET:
                 break
         self._update_progress(context)
         return False
