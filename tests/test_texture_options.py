@@ -84,6 +84,27 @@ def test_oversized_opaque_png_converts_and_resizes():
                  prefer_jpg=True, max_res=1024) == ("JPEG", True)
 
 
+# --- _material_uses_alpha: the signal driving a baked diffuse's alpha channel ----------------
+
+def test_alpha_linked_uses_alpha():
+    assert wlsave_export._material_uses_alpha({"alphaLinked": True}) is True
+    # even with a constant alpha of 1, a linked Alpha still counts (the mask is in the graph).
+    assert wlsave_export._material_uses_alpha({"alphaLinked": True, "alpha": 1.0}) is True
+
+
+def test_constant_alpha_below_one_uses_alpha():
+    assert wlsave_export._material_uses_alpha({"alpha": 0.5}) is True
+    assert wlsave_export._material_uses_alpha({"alpha": 0.99}) is True
+
+
+def test_opaque_material_does_not_use_alpha():
+    # Alpha == 1, unlinked -> opaque (pure-transmission glass also lands here: alpha 1, not linked).
+    assert wlsave_export._material_uses_alpha({"alpha": 1.0, "alphaLinked": False}) is False
+    assert wlsave_export._material_uses_alpha({"alpha": 0.99999}) is False     # ~1, float noise
+    assert wlsave_export._material_uses_alpha({}) is False
+    assert wlsave_export._material_uses_alpha({"alpha": None}) is False
+
+
 def test_missing_and_udim_are_skipped():
     assert _plan("missing", "", has_alpha=False, prefer_jpg=True) == (None, False)
     assert _plan("udim", ".png", has_alpha=False, prefer_jpg=True, max_res=512) == (None, False)

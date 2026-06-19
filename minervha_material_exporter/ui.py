@@ -231,10 +231,16 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
             for i, (norm, mat, chans) in enumerate(todo, 1):
                 yield ("bake", i, len(todo))
                 res = _adaptive_bake_res(mat, ceiling, max_res)
+                # A material that USES transparency (Alpha linked or < 1) needs its Base Color bake
+                # to carry the mask in an alpha channel -> bake alpha + force PNG for that channel.
+                uses_alpha = wlsave_export._material_uses_alpha(norm)
                 for ch in chans:
+                    ch_alpha = uses_alpha and ch == "diffuse"
+                    ch_fmt, ch_ext = ("PNG", ".png") if ch_alpha else (fmt, ext)
                     safe = wlsave_export._sanitize_name(mat.name, "mat")
-                    out = os.path.join(tex_dir, "%s_%s%s" % (safe, ch, ext))
-                    path = bake.bake_channel(mat, ch, res, out, image_format=fmt, jpg_quality=jpg_quality)
+                    out = os.path.join(tex_dir, "%s_%s%s" % (safe, ch, ch_ext))
+                    path = bake.bake_channel(mat, ch, res, out, image_format=ch_fmt,
+                                             jpg_quality=jpg_quality, bake_alpha=ch_alpha)
                     if not path:
                         continue
                     slot = _BAKE_CH_SLOT[ch]
@@ -243,7 +249,7 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
                     norm["textures"].insert(0, {
                         "name": "%s_%s" % (mat.name, ch), "fileKind": "path",
                         "path": path, "basename": os.path.basename(path),
-                        "slots": [slot], "mapping": None, "baked": True, "has_alpha": False})
+                        "slots": [slot], "mapping": None, "baked": True, "has_alpha": ch_alpha})
                     baked.append([mat.name, ch])
         return baked
     return baker

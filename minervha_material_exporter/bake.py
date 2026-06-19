@@ -199,23 +199,65 @@ def _emit_rewire(mat, input_name):
     return restore
 
 
-def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_quality=90):
+def _bake_alpha_into(plane, mat, img):
+    """Fill RGBA `img`'s ALPHA channel from the material's Principled Alpha input, so a baked
+    Base Color carries its transparency mask (otherwise a Masked/alpha-tested look is lost — the
+    flat RGB diffuse bake has no mask). A LINKED Alpha is EMIT-baked (captures the mask graph /
+    cutoff via the node tree); a CONSTANT Alpha fills a flat value. Vectorized via numpy (a Python
+    per-pixel loop over a 2K² buffer would be seconds × every material). Best-effort — on any
+    failure the alpha stays 1 (opaque), never worse than the old behavior."""
+    import numpy as np
+    pr = _principled_of(mat)
+    inp = pr.inputs.get("Alpha") if pr is not None else None
+    n = len(img.pixels)
+    a = np.empty(n, dtype=np.float32)
+    img.pixels.foreach_get(a)
+    if inp is not None and inp.is_linked:
+        tmp = bpy.data.images.new("_bake_alpha_tmp", img.size[0], img.size[1], alpha=False)
+        tmp.colorspace_settings.name = "Non-Color"
+        restore = _emit_rewire(mat, "Alpha")
+        try:
+            if restore is not None:
+                _bake_into(plane, mat, tmp, "EMIT")
+                b = np.empty(len(tmp.pixels), dtype=np.float32)
+                tmp.pixels.foreach_get(b)
+                a[3::4] = b[0::4]                       # EMIT red = alpha -> target A channel
+        finally:
+            if restore is not None:
+                restore()
+            if tmp.name in bpy.data.images:
+                bpy.data.images.remove(tmp, do_unlink=True)
+    else:
+        a[3::4] = float(inp.default_value) if inp is not None else 1.0
+    img.pixels.foreach_set(a)
+    img.update()
+
+
+def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_quality=90,
+                 bake_alpha=False):
     """Bake one WL channel of `mat` to `out_path` on a throwaway full-UV placeholder plane
     (NEVER a scene mesh); return the path, or None if the channel is not bakeable here (constant
     input / unknown channel). Must run inside `bake_environment()`. One bake per material -> one
     shared texture, correct for every mesh that uses it.
 
     `image_format` ('PNG'|'JPEG') is the on-disk encoding the BAKER picks from the user's texture
-    options (the bake target is always `alpha=False`, so JPEG is always valid). Writing the final
-    format here is mandatory: the target Image is removed in this function's `finally`, so the
-    downstream texture pre-pass can no longer re-encode it (it would find no bpy image and silently
-    keep PNG) — hence a baked channel never honored 'Prefer JPG'. `out_path`'s extension must match."""
+    options. Writing the final format here is mandatory: the target Image is removed in this
+    function's `finally`, so the downstream texture pre-pass can no longer re-encode it (it would
+    find no bpy image and silently keep PNG) — hence a baked channel never honored 'Prefer JPG'.
+    `out_path`'s extension must match.
+
+    `bake_alpha` (diffuse only): also bake the material's Alpha into the target's alpha channel and
+    FORCE PNG — for a material that uses transparency, a flat RGB(JPEG) diffuse bake drops the mask.
+    Ignored for non-diffuse channels (they carry no transparency)."""
     spec = _CHANNEL_BAKE.get(channel)
     if spec is None:
         return None
     bake_type, colorspace, rewire_input = spec
 
-    img = bpy.data.images.new(f"_bake_{mat.name}_{channel}", resolution, resolution, alpha=False)
+    want_alpha = bool(bake_alpha) and channel == "diffuse"
+    if want_alpha:
+        image_format = "PNG"                           # an alpha mask cannot survive JPEG
+    img = bpy.data.images.new(f"_bake_{mat.name}_{channel}", resolution, resolution, alpha=want_alpha)
     img.colorspace_settings.name = colorspace          # encodes the PNG on save (buffer is linear)
     restore = None
     try:
@@ -231,6 +273,8 @@ def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_qua
 
         with placeholder_plane(mat) as plane:
             _bake_into(plane, mat, img, bake_type, **kw)
+            if want_alpha:
+                _bake_alpha_into(plane, mat, img)      # composite the mask into the A channel
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         img.filepath_raw = out_path

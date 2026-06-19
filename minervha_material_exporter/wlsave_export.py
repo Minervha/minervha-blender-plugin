@@ -155,6 +155,19 @@ def _plan_texture(file_kind, ext, has_alpha, width, height, prefer_jpg, max_res)
     return target, True
 
 
+def _material_uses_alpha(norm):
+    """True if the material actually USES transparency — its Principled Alpha is connected
+    (`alphaLinked`) or set to a constant < 1. This is the WL-relevant signal for whether a
+    baked Base Color texture must carry an alpha channel (a Masked/alpha-tested look): a flat
+    RGB diffuse bake (no alpha) silently drops the mask, so foliage/glass render as solid quads.
+    Pure transmission/refraction glass (Alpha = 1, unlinked) returns False — its transparency is
+    refractive, not a diffuse mask."""
+    if norm.get("alphaLinked"):
+        return True
+    a = norm.get("alpha")
+    return a is not None and float(a) < 0.9999      # ≠ 1 (small margin ignores float noise)
+
+
 def _export_image(image_name, dest_dir, used, target_format, jpg_quality, max_res):
     """Re-export a bpy image into `dest_dir` as `target_format` ('JPEG'|'PNG'), downscaled to
     fit `max_res` (longest side) when set. Mutates only a throwaway copy, so the user's image

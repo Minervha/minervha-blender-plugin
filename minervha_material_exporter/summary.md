@@ -147,6 +147,19 @@ overwritten `last_export.log` under `bpy.utils.extension_path_user(__package__)`
 `register()` reloads it so the last run survives a restart. Plan:
 [`../docs/plans/features/responsive-export/plan.md`](../docs/plans/features/responsive-export/plan.md).
 
+**Baked transparency fix (validated live Blender 5.1.2).** A baked Base Color dropped the material's
+transparency mask: `bake.bake_channel` always created an `alpha=False` (RGB) target and the DIFFUSE pass
+captures no alpha, so a Masked/alpha-tested material (foliage, alpha-tested glass) baked a flat opaque diffuse
+— and with *Prefer JPG* it shipped as `.jpg` (no alpha at all). In a real bundle (ResortMadness, prefer-JPG
+on, bake on) **71 Masked materials had a `.jpg` diffuse** → solid quads in-game. Fix: `wlsave_export._material_uses_alpha(norm)`
+(the certified signal = Principled **Alpha linked, or constant < 1**; pure-transmission glass with Alpha=1
+is excluded); when it's true and the channel is **diffuse**, `_make_material_baker` bakes with `bake_alpha=True`
+and **forces PNG**, and `bake.bake_channel` makes an RGBA target and `bake._bake_alpha_into` EMIT-bakes the
+Alpha graph (mask/cutoff) into the target's A channel (numpy-vectorised). Direct (non-baked) RGBA diffuse
+textures were already correct (kept PNG by `_image_facts` depth) — only the bake path is touched. Live: `leaf_8`
+/ `plant_03` bake an RGBA PNG with a real mask (alpha min 0 / max 1 / mean ~0.34) instead of a flat JPG.
+Tests: `test_texture_options.py` adds `_material_uses_alpha` cases.
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
