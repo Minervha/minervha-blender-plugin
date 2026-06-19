@@ -211,6 +211,15 @@ def _scene_materials(objs):
     return introspect.collect('COLLECTION', objs)
 
 
+def _thumbnail_path(context):
+    """The chosen thumbnail file path (absolute, expanded) or None. Blender stores a
+    FILE_PATH prop with `//`-relative / `~` forms — resolve them so the exporter can open it."""
+    raw = (context.scene.minervha_thumbnail_path or "").strip()
+    if not raw:
+        return None
+    return os.path.abspath(bpy.path.abspath(raw))
+
+
 class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     bl_idname = "minervha.export_wlsave"
     bl_label = "Export .wlsave"
@@ -245,7 +254,8 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             self.report({'WARNING'}, "No materials in the selected scope")
             return {'CANCELLED'}
         _annotate_flip(context, norms)
-        report = wlsave_export.build_wlsave(norms, name, self.filepath, tex_opts=self._tex_opts(context))
+        report = wlsave_export.build_wlsave(norms, name, self.filepath, tex_opts=self._tex_opts(context),
+                                            thumbnail=_thumbnail_path(context))
         report["materialsUnused"] = introspect.unused_materials(
             context.scene.minervha_scope, _objects_for_scope(context))
         self.report({'INFO'}, "Built %s — %d materials, %d textures (%d missing)" % (
@@ -286,7 +296,10 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
                                                       position_scale=world_scale, level=level,
                                                       tex_opts=self._tex_opts(context),
-                                                      material_baker=baker)
+                                                      material_baker=baker,
+                                                      thumbnail=_thumbnail_path(context),
+                                                      master_group=bool(context.scene.minervha_master_group),
+                                                      enable_collision=bool(context.scene.minervha_enable_collision))
         finally:
             if bake_tmp:
                 shutil.rmtree(bake_tmp, ignore_errors=True)
@@ -306,6 +319,49 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             _popup_report(context, report)
         except Exception:
             pass  # popup needs UI context; the status-bar report above always fires
+
+
+class MINERVHA_OT_capture_thumbnail(bpy.types.Operator):
+    bl_idname = "minervha.capture_thumbnail"
+    bl_label = "Capture 3D View"
+    bl_description = ("Render the current 3D viewport to an image and use it as the save thumbnail "
+                     "(longest side 512 px, aspect of the viewport)")
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        area = next((a for a in context.screen.areas if a.type == 'VIEW_3D'), None)
+        if area is None:
+            self.report({'WARNING'}, "No 3D viewport found to capture")
+            return {'CANCELLED'}
+        region = next((rg for rg in area.regions if rg.type == 'WINDOW'), None)
+        rw, rh = (region.width, region.height) if region else (512, 512)
+        scale = 512.0 / max(rw, rh, 1)
+        res_x, res_y = max(1, int(round(rw * scale))), max(1, int(round(rh * scale)))
+        # An explicit filepath ending in `.png` (PNG format) is written verbatim by render.opengl —
+        # no frame digits appended (frame_path() would wrongly suffix `0001`, so don't use it).
+        out = os.path.join(tempfile.gettempdir(), "minervha_thumbnail_capture.png")
+        r = context.scene.render
+        saved = (r.filepath, r.resolution_x, r.resolution_y, r.resolution_percentage,
+                 r.image_settings.file_format)
+        try:
+            r.resolution_x, r.resolution_y = res_x, res_y
+            r.resolution_percentage = 100
+            r.image_settings.file_format = 'PNG'
+            r.filepath = out
+            with context.temp_override(window=context.window, area=area, region=region):
+                bpy.ops.render.opengl(write_still=True, view_context=True)
+        except Exception as e:
+            self.report({'WARNING'}, "Viewport capture failed: %s" % e)
+            return {'CANCELLED'}
+        finally:
+            (r.filepath, r.resolution_x, r.resolution_y, r.resolution_percentage,
+             r.image_settings.file_format) = saved
+        if os.path.isfile(out) and os.path.getsize(out) > 0:
+            context.scene.minervha_thumbnail_path = out
+            self.report({'INFO'}, "Captured viewport thumbnail (%dx%d)" % (res_x, res_y))
+            return {'FINISHED'}
+        self.report({'WARNING'}, "Viewport capture produced no image")
+        return {'CANCELLED'}
 
 
 def _print_missing_detail(report):
@@ -332,6 +388,8 @@ def _popup_report(context, report):
         layout.label(text=("Map %s: " % lvl if lvl else "Collection: ") + report['name'])
         if report.get('nameOriginal') and report['nameOriginal'] != report['name']:
             layout.label(text="Name adjusted: %s -> %s" % (report['nameOriginal'], report['name']))
+        if report.get('thumbnail'):
+            layout.label(text="Thumbnail: included", icon='IMAGE_DATA')
         layout.label(text="Materials created: %d" % len(report['created']))
         layout.label(text="Textures copied: %d" % len(report['texturesCopied']))
         if report['texturesReExported']:
@@ -355,6 +413,10 @@ def _popup_report(context, report):
             layout.separator()
             layout.label(text="Objects exported: %d" % len(report['objectsExported']))
             layout.label(text="Meshes written: %d" % len(report['meshesWritten']))
+            if report.get('masterGroup'):
+                layout.label(text="Master group: %s" % report['masterGroup'], icon='GROUP')
+            if report.get('enableCollision'):
+                layout.label(text="Collisions: enabled", icon='PHYSICS')
             if report['noUv']:
                 layout.label(text="Objects without UVs: %d" % len(report['noUv']), icon='ERROR')
             if report.get('materialsBaked'):
@@ -431,14 +493,23 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
             if scene.minervha_bake:
                 tex.prop(scene, "minervha_bake_res", text="Bake resolution")
 
+        if scene_mode:
+            scn = layout.box()
+            scn.label(text="Scene options", icon='OBJECT_DATA')
+            scn.prop(scene, "minervha_master_group")
+            scn.prop(scene, "minervha_enable_collision")
+
         layout.separator()
         box = layout.box()
         box.label(text="Wild Life collection (.wlsave)")
         box.prop(scene, "minervha_wlsave_name", text="Name")
+        row = box.row(align=True)
+        row.prop(scene, "minervha_thumbnail_path", text="Thumbnail")
+        row.operator("minervha.capture_thumbnail", text="", icon='RENDER_STILL')
         box.operator("minervha.export_wlsave", icon='PACKAGE')
 
 
-_classes = (MINERVHA_OT_export_wlsave, MINERVHA_PT_exporter)
+_classes = (MINERVHA_OT_export_wlsave, MINERVHA_OT_capture_thumbnail, MINERVHA_PT_exporter)
 
 
 def register():
@@ -473,6 +544,18 @@ def register():
         description="Wild Life reads DirectX-convention normal maps (green channel flipped). "
                     "Leave on for OpenGL-authored normals (the Blender default); turn off if your "
                     "normal maps are already DirectX")
+    bpy.types.Scene.minervha_master_group = BoolProperty(
+        name="Wrap in master group", default=False,
+        description="Scene mode: parent every top-level object under one Wild Life group named after "
+                    "the save, so the imported scene hangs off a single node")
+    bpy.types.Scene.minervha_enable_collision = BoolProperty(
+        name="Enable collisions", default=False,
+        description="Scene mode: export every mesh with collision enabled (EnableCollision). Off by "
+                    "default, matching the majority of Wild Life saves")
+    bpy.types.Scene.minervha_thumbnail_path = StringProperty(
+        name="Thumbnail", default="", subtype='FILE_PATH',
+        description="Image bundled as the save's thumbnail (<Name>/<Name>.png). Any Blender-readable "
+                    "image; re-encoded to PNG at 512 px. Use the camera button to capture the 3D viewport")
     for cls in _classes:
         bpy.utils.register_class(cls)
 
@@ -483,6 +566,7 @@ def unregister():
     for prop in ("minervha_export_mode", "minervha_export_target", "minervha_scope",
                  "minervha_collection", "minervha_wlsave_name",
                  "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res",
-                 "minervha_bake", "minervha_bake_res", "minervha_flip_green"):
+                 "minervha_bake", "minervha_bake_res", "minervha_flip_green",
+                 "minervha_master_group", "minervha_enable_collision", "minervha_thumbnail_path"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

@@ -102,6 +102,33 @@ def test_bisvisible_per_object():
     assert vis["bIsVisible"] is True and hid["bIsVisible"] is False
 
 
+def test_enable_collision_toggle():
+    off = prop_mapper.map_object(_mesh_obj(), mesh_path="x", material_names=MAT_NAMES)
+    on = prop_mapper.map_object(_mesh_obj(), mesh_path="x", material_names=MAT_NAMES, enable_collision=True)
+    assert off["boolSettings"]["EnableCollision"] is False          # default unchanged (golden stable)
+    assert on["boolSettings"]["EnableCollision"] is True
+    # only the one flag flips — the rest of boolSettings is untouched.
+    assert on["boolSettings"]["UseTriplanarMapping"] is False
+    assert on["boolSettings"]["SimulatePhysics"] is False
+
+
+def test_master_group_shape_and_guid():
+    mg = prop_mapper.master_group("MySave")
+    assert mg["iD"] == "Group"
+    assert mg["label"] == "MySave"
+    assert mg["parent"] == prop_mapper.root_guid()
+    assert mg["position"] == {"x": 0.0, "y": 0.0, "z": 0.0}
+    assert mg["rotation"] == {"pitch": 0.0, "yaw": 0.0, "roll": 0.0}
+    assert mg["scale"] == {"x": 1.0, "y": 1.0, "z": 1.0}
+    assert HEX32.match(mg["guid"]), mg["guid"]
+    # Group customEvents (5 inEvents incl. setVisibilityBelow); no mesh/materials.
+    assert "setVisibilityBelow" in mg["customEvents"]["inEvents"]
+    assert mg["stringSettings"] == {}
+    # guid is reserved-key-derived, so it never collides with an object sharing the save name.
+    assert mg["guid"] != prop_mapper.make_guid("MySave")
+    assert prop_mapper.master_group("A")["guid"] != prop_mapper.master_group("B")["guid"]
+
+
 def test_group_shape():
     g = prop_mapper.map_object(_group(name="Empty", parent=None), mesh_path=None, material_names={})
     assert g["iD"] == "Group"

@@ -112,13 +112,33 @@ user ask "the plugin says N missing — *which* texture on *which* mesh?". Addit
 consumers/tests untouched); the material→object link reuses `introspect`'s `norm["objects"]`
 (`bsdf_trace.objects_using_material`).
 
+**Export options — master group / thumbnail / collisions (validated live Blender 5.1.2).** Three opt-in
+export options, all certified against the real game corpus (`%LOCALAPPDATA%/WildLifeC/Saved/SandboxSaveGames`,
+135 saves) and the Studio builder (`Minervha Studio/electron-helpers/wlsaveOps.js`). **(1) Master group**
+(Scene mode): `prop_mapper.master_group(name)` emits one synthetic root `Group` (identity transform — keeps
+children's parent-relative placement) and `build_scene_wlsave` re-parents every otherwise-root prop onto it,
+so the imported scene hangs off a single node. Its guid is reserved-key-derived (never collides with an
+object's). **(2) Thumbnail** (both modes): a chosen image is bundled as `<Name>/<Name>.png` written **before**
+any `Textures/` entry — the Studio reader (`extractFirstPngFromZip`) takes the FIRST `.png` in archive order —
+and `bHasDedicatedIcon` is set. `wlsave_export._prepare_icon` re-encodes any Blender-readable image to PNG
+capped at 512 px (live: 1024×512 → 512×256); `ui.MINERVHA_OT_capture_thumbnail` renders the 3D viewport to a
+temp PNG (viewport aspect, 512 px long side — live 512×222) as an alternative source (an explicit `.png`
+render filepath is written verbatim; `frame_path()` must NOT be used — it suffixes a frame number). **(3)
+Collisions** (Scene mode): one scene-wide toggle drives every UserMesh's `boolSettings.EnableCollision`
+(threaded through `prop_mapper.map_object`); default **off** (~90% of real saves: 16465 false / 1743 true).
+`ui.py` adds the three props (+ a "Scene options" box and a Thumbnail row with a capture button) and reports
+each in the popup. Plan: [`../docs/plans/features/export-options/plan.md`](../docs/plans/features/export-options/plan.md).
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
 `test_tiling.py` (`textureTiling` = reciprocal of Blender Mapping Scale);
 `test_prop_mapper.py` + `test_transform.py` (snapshot of `prop_mapper.py` — `normalized_objects.json` fixtures,
-golden `expected_props.json` regenerable via `_gen_golden_props.py`);
-`test_scene_build.py` (`build_scene_wlsave` end-to-end with OBJ export injected — Models/props/cross-ref);
+golden `expected_props.json` regenerable via `_gen_golden_props.py`; + `master_group` shape and the
+`enable_collision` toggle);
+`test_scene_build.py` (`build_scene_wlsave` end-to-end with OBJ export injected — Models/props/cross-ref; +
+master-group wrapping, collision propagation, thumbnail-as-first-PNG);
+`test_thumbnail.py` (`_prepare_icon` pure path + `_write_zip` writes the icon before any texture + `bHasDedicatedIcon`);
 `test_texture_collision.py` (dedup by srcPath, collision rename);
 `test_texture_options.py` (pure `_plan_texture` JPG/PNG/downscale decision + `tex_opts` end-to-end);
 `test_missing_report.py` (per-texture `missingDetail`: packed → material+meshes+channel+reason; on-disk

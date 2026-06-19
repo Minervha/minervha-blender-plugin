@@ -46,14 +46,14 @@ def _fake_obj_exporter(mesh_key, dest_dir, used_basenames):
     return basename
 
 
-def _build(level=""):
+def _build(level="", **kwargs):
     objs = _fixtures()
     norms = _material_norms(objs)
     tmp = tempfile.mkdtemp(prefix="scene_test_")
     dest = os.path.join(tmp, "out.wlsave")
     report = wlsave_export.build_scene_wlsave(
         norms, objs, NAME, dest, _fake_obj_exporter,
-        skeleton_path=os.path.join(PKG, "skeleton.json"), level=level)
+        skeleton_path=os.path.join(PKG, "skeleton.json"), level=level, **kwargs)
     with zipfile.ZipFile(dest) as z:
         names = z.namelist()
         data = json.loads(z.read(f"{NAME}/{NAME}.json"))
@@ -126,6 +126,87 @@ def test_level_map_target():
     # Only the level field changes — the ZIP layout (Models/, props, customMaterials) is unchanged.
     assert f"{NAME}/{NAME}.json" in names
     assert len(data["props"]) == len(objs)
+
+
+import struct  # noqa: E402
+import zlib  # noqa: E402
+
+import prop_mapper  # noqa: E402
+
+
+def _tiny_png(w=2, h=2):
+    """A minimal valid RGBA PNG (no bpy) for thumbnail tests."""
+    def chunk(typ, data):
+        body = typ + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+    raw = b"".join(b"\x00" + b"\xff\x00\x00\xff" * w for _ in range(h))  # filter byte + red row
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw))
+            + chunk(b"IEND", b""))
+
+
+def test_master_group_wraps_every_root():
+    base_objs, base_report, _, base_data = _build()
+    objs, report, names, data = _build(master_group=True)
+    props = data["props"]
+    # exactly one extra prop (the synthetic master group).
+    assert len(props) == len(base_data["props"]) + 1
+    root = prop_mapper.root_guid()
+    roots = [p for p in props if p["parent"] == root]
+    # after wrapping, the master group is the ONLY prop hanging off the scene root.
+    assert len(roots) == 1
+    mg = roots[0]
+    assert mg["iD"] == "Group"
+    assert mg["label"] == NAME
+    assert mg["guid"] == prop_mapper.master_group(NAME)["guid"]
+    assert report["masterGroup"] == NAME
+    # every other prop is now parented to the master group (or to its own non-root parent).
+    assert all(p["parent"] != root for p in props if p["guid"] != mg["guid"])
+
+
+def test_master_group_off_by_default():
+    objs, report, names, data = _build()
+    assert report["masterGroup"] is None
+    # without the toggle, at least one prop sits at the scene root (the fixture's "Root" group).
+    root = prop_mapper.root_guid()
+    assert any(p["parent"] == root for p in data["props"])
+
+
+def test_enable_collision_propagates_to_all_usermesh():
+    objs, report, names, data = _build(enable_collision=True)
+    meshes = [p for p in data["props"] if p["iD"] == "UserMesh"]
+    assert meshes and all(p["boolSettings"]["EnableCollision"] is True for p in meshes)
+    assert report["enableCollision"] is True
+    # default stays off.
+    _, _, _, data_off = _build()
+    assert all(p["boolSettings"]["EnableCollision"] is False
+               for p in data_off["props"] if p["iD"] == "UserMesh")
+
+
+def test_thumbnail_bundled_as_first_png_and_flagged():
+    tmp = tempfile.mkdtemp(prefix="scene_thumb_")
+    try:
+        png = os.path.join(tmp, "thumb.png")
+        with open(png, "wb") as f:
+            f.write(_tiny_png())
+        objs, report, names, data = _build(thumbnail=png)
+        assert f"{NAME}/{NAME}.png" in names
+        assert data["bHasDedicatedIcon"] is True
+        assert report["thumbnail"] is True
+        # icon precedes any Textures/ entry (Studio reader takes the first .png).
+        icon_i = names.index(f"{NAME}/{NAME}.png")
+        tex_is = [i for i, n in enumerate(names) if n.startswith(f"{NAME}/Textures/")]
+        assert all(icon_i < i for i in tex_is)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_no_thumbnail_leaves_flag_false():
+    objs, report, names, data = _build()
+    assert data["bHasDedicatedIcon"] is False
+    assert report["thumbnail"] is False
+    assert not any(n.endswith(".png") for n in names)
 
 
 def test_materials_only_path_still_namespaces():

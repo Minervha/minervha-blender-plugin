@@ -117,7 +117,7 @@ def _custom_materials(material_slots, material_names):
     return out
 
 
-def _map_usermesh(norm, transform, mesh_path, material_names):
+def _map_usermesh(norm, transform, mesh_path, material_names, enable_collision=False):
     p = dict(_common(norm, transform))
     p["iD"] = "UserMesh"
     p["bIsInteractable"] = False
@@ -127,7 +127,7 @@ def _map_usermesh(norm, transform, mesh_path, material_names):
     p["intSettings"] = {"Material Type": 0}
     p["colorSettings"] = {"Color": {"r": 0.25, "g": 0.25, "b": 0.25, "a": 1},
                           "emission": {"r": 0, "g": 0, "b": 0, "a": 1}}
-    p["boolSettings"] = {"EnableCollision": False, "UseTriplanarMapping": False,
+    p["boolSettings"] = {"EnableCollision": bool(enable_collision), "UseTriplanarMapping": False,
                          "SimulatePhysics": False, "ShowIcon": True}
     p["vectorSettings"] = {}
     string_settings = {"Texture Override URL": "", "MeshPath": mesh_path or ""}
@@ -152,7 +152,42 @@ def _map_group(norm, transform):
     return p
 
 
-def map_object(norm, mesh_path=None, material_names=None, position_scale=1.0):
+def master_group(name):
+    """A synthetic root Group prop that parents every otherwise-root prop.
+
+    Identity transform (position 0 / rotation 0 / scale 1) so the children's existing
+    parent-relative transforms still place them correctly once re-parented. Its guid is
+    derived from a reserved key (not `name`), so it never collides with an object's guid
+    even if a scene object happens to share the save's name. `label` is the save `name`
+    ("au nom de la save"). Same Group shape as `_map_group`."""
+    return {
+        "label": name,
+        "labelColor": {"r": 0, "g": 0, "b": 0, "a": 0},
+        "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "rotation": {"pitch": 0.0, "yaw": 0.0, "roll": 0.0},
+        "scale": {"x": 1.0, "y": 1.0, "z": 1.0},
+        "guid": make_guid("\x00minervha-master-group\x00" + str(name)),
+        "parent": _ROOT_GUID,
+        "childIndex": 0,
+        "attachment": "None",
+        "bIsVisible": True,
+        "bIsCompletelyLocked": False,
+        "bCanReceiveEvents": True,
+        "bCanDispatchEvents": True,
+        "iD": "Group",
+        "bIsInteractable": True,
+        "bIsFoldedOut": False,
+        "boolSettings": {"ShowIcon": True},
+        "floatSettings": {},
+        "intSettings": {},
+        "colorSettings": {},
+        "stringSettings": {},
+        "vectorSettings": {},
+        "customEvents": _group_events(),
+    }
+
+
+def map_object(norm, mesh_path=None, material_names=None, position_scale=1.0, enable_collision=False):
     """NormalizedObject -> WL prop dict.
 
     mesh_path: full relative MeshPath "<Name>/Models/<file>.obj" for a mesh object
@@ -160,6 +195,8 @@ def map_object(norm, mesh_path=None, material_names=None, position_scale=1.0):
     material_names: {blender_mat_name -> namespaced customMaterials name
       "<Collection>/<Mat>"}; the POST-sanitisation/dedup names. Unknown/empty slot -> "".
     position_scale: world scale factor (1 / scene Unit Scale) applied to the prop position.
+    enable_collision: drive a UserMesh's `boolSettings.EnableCollision` (one scene-wide
+      toggle; ignored for groups).
     """
     t = norm.get("transform") or {}
     transform = blender_to_wl_transform(
@@ -171,4 +208,4 @@ def map_object(norm, mesh_path=None, material_names=None, position_scale=1.0):
     )
     if norm.get("kind") == "group":
         return _map_group(norm, transform)
-    return _map_usermesh(norm, transform, mesh_path, material_names)
+    return _map_usermesh(norm, transform, mesh_path, material_names, enable_collision)

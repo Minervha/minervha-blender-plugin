@@ -244,12 +244,61 @@ def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=N
     return reexported
 
 
-def _write_zip(dest_path, name, save_obj, tex_bytes, model_bytes=None):
+def _prepare_icon(path, max_side=512):
+    """A user-chosen thumbnail image -> PNG bytes (longest side <= `max_side`), or None.
+
+    With bpy: load any Blender-readable format, downscale to fit `max_side` (aspect kept),
+    re-encode PNG — so the bundle's icon is always a PNG (the Studio reader matches the first
+    `.png` entry) regardless of the source format. Without bpy (pure-Python tests): accept an
+    on-disk `.png` as-is, reject anything else. Best-effort — never raises."""
+    if not path or not os.path.isfile(path):
+        return None
+    if bpy is None:
+        if os.path.splitext(path)[1].lower() == ".png":
+            with open(path, "rb") as f:
+                return f.read()
+        return None
+    img = None
+    icon_dir = None
+    try:
+        img = bpy.data.images.load(path, check_existing=False)
+        if not img.has_data:
+            img.pixels[0]                       # force the lazy load in the source format
+        w, h = int(img.size[0]), int(img.size[1])
+        if w and h and max(w, h) > max_side:
+            scale = max_side / float(max(w, h))
+            img.scale(max(1, round(w * scale)), max(1, round(h * scale)))
+        icon_dir = tempfile.mkdtemp(prefix="wlsave_icon_")
+        out = os.path.join(icon_dir, "icon.png")
+        img.file_format = "PNG"
+        img.filepath_raw = out
+        img.save()
+        if os.path.isfile(out) and os.path.getsize(out) > 0:
+            with open(out, "rb") as f:
+                return f.read()
+        return None
+    except Exception:
+        return None
+    finally:
+        if img is not None:
+            try:
+                bpy.data.images.remove(img)
+            except Exception:
+                pass
+        if icon_dir:
+            shutil.rmtree(icon_dir, ignore_errors=True)
+
+
+def _write_zip(dest_path, name, save_obj, tex_bytes, model_bytes=None, icon_bytes=None):
     os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
     tmp = dest_path + ".tmp"
     json_bytes = json.dumps(save_obj, indent=2, ensure_ascii=False).encode("utf-8")
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(f"{name}/{name}.json", json_bytes)
+        # The thumbnail MUST precede every Textures/ PNG: the Studio reader takes the FIRST
+        # `.png` entry in archive order as the save's icon (wlsaveOps.extractFirstPngFromZip).
+        if icon_bytes:
+            z.writestr(f"{name}/{name}.png", icon_bytes)
         for basename, data in tex_bytes.items():
             z.writestr(f"{name}/Textures/{basename}", data)
         for basename, data in (model_bytes or {}).items():
@@ -408,15 +457,16 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
     return entries, tex_bytes, material_names
 
 
-def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None):
+def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thumbnail=None):
     """Build `dest_path` (.wlsave) from NormalizedMaterial[] `norms` as collection `name`.
 
     Materials-only bundle. Collection name, material names and texture basenames are
     sanitized to the game's filename charset (see _sanitize_name); material names are
     additionally namespaced "<Collection>/<Mat>". `tex_opts` (or None) drives the texture
-    pre-pass: {prefer_jpg, jpg_quality, max_res}. Returns a report dict: name,
-    nameOriginal, created[], renamed[], skipped[], texturesCopied[],
-    texturesReExported[], texturesMissing[], texturesRenamed[].
+    pre-pass: {prefer_jpg, jpg_quality, max_res}. `thumbnail` (or None) is a path to an image
+    file bundled as the save's icon `<Name>/<Name>.png` (set `bHasDedicatedIcon`). Returns a
+    report dict: name, nameOriginal, created[], renamed[], skipped[], texturesCopied[],
+    texturesReExported[], texturesMissing[], texturesRenamed[], thumbnail.
     """
     name_original = name
     name = _sanitize_name(name, "Collection")
@@ -426,10 +476,12 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None):
     tmpdir = tempfile.mkdtemp(prefix="wlsave_tex_")
     try:
         entries, tex_bytes, _ = _build_material_entries(norms, name, report, tmpdir, tex_opts)
+        icon_bytes = _prepare_icon(thumbnail)
         skel["level"] = ""
         skel["customMaterials"] = entries
-        skel["bHasDedicatedIcon"] = False
-        _write_zip(dest_path, name, skel, tex_bytes)
+        skel["bHasDedicatedIcon"] = bool(icon_bytes)
+        report["thumbnail"] = bool(icon_bytes)
+        _write_zip(dest_path, name, skel, tex_bytes, icon_bytes=icon_bytes)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -437,7 +489,8 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None):
 
 
 def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
-                       position_scale=1.0, level="", tex_opts=None, material_baker=None):
+                       position_scale=1.0, level="", tex_opts=None, material_baker=None,
+                       thumbnail=None, master_group=False, enable_collision=False):
     """Build a full-scene `.wlsave`: customMaterials + props (UserMesh/Group) + Models/ OBJs.
 
     `norms`        — NormalizedMaterial[] for the materials used by the in-scope objects.
@@ -459,11 +512,18 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                      so the rest of the pipeline treats them as ordinary on-disk textures. bpy-side
                      and Scene-mode only (baking needs an object+UV); the UI builds it, tests pass
                      None. Returns the list recorded as report["materialsBaked"].
+    `thumbnail`    — optional path to an image bundled as the save icon `<Name>/<Name>.png`
+                     (sets `bHasDedicatedIcon`); see `_prepare_icon`.
+    `master_group` — when True, wrap every otherwise-root prop under one synthetic root `Group`
+                     named after the save (`prop_mapper.master_group`), so the in-game scene has a
+                     single top node. Identity transform keeps every child's placement.
+    `enable_collision` — drive every UserMesh's `boolSettings.EnableCollision` (one scene-wide toggle).
 
     One OBJ per unique mesh datablock (instances reuse the same MeshPath). Material names are
     namespaced; each prop's CustomMaterial{i} references them by that exact name. Returns the
     materials report extended with: objectsExported[], objectsSkipped[], noUv[],
-    proceduralMaterials[], meshesWritten[], materialsBaked[], materialNamespaced, level.
+    proceduralMaterials[], meshesWritten[], materialsBaked[], materialNamespaced, level,
+    thumbnail, masterGroup.
     """
     name_original = name
     name = _sanitize_name(name, "Collection")
@@ -472,7 +532,8 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
     report.update({"objectsExported": [], "objectsSkipped": [], "noUv": [],
                    "proceduralMaterials": [], "meshesWritten": [], "meshExportFailed": [],
                    "materialsBaked": [], "materialsApproximated": [],
-                   "materialNamespaced": True, "level": level})
+                   "materialNamespaced": True, "level": level,
+                   "thumbnail": False, "masterGroup": None, "enableCollision": bool(enable_collision)})
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_scene_")
     try:
@@ -523,7 +584,8 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
         for o in norm_objects:
             mp = mesh_path_by_key.get(o.get("mesh_key"))
             props.append(prop_mapper.map_object(o, mesh_path=mp, material_names=material_names,
-                                                position_scale=position_scale))
+                                                position_scale=position_scale,
+                                                enable_collision=enable_collision))
             if o.get("kind") == "mesh":
                 report["objectsExported"].append(o.get("name"))
                 v = o.get("validation") or {}
@@ -533,11 +595,24 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                     if pm not in report["proceduralMaterials"]:
                         report["proceduralMaterials"].append(pm)
 
+        # Optional master group: a single synthetic root Group parents every otherwise-root prop,
+        # so the imported scene hangs off one node. Its identity transform keeps children placed.
+        if master_group and props:
+            mg = prop_mapper.master_group(name)
+            mg_guid, root = mg["guid"], prop_mapper.root_guid()
+            for p in props:
+                if p.get("parent") == root:
+                    p["parent"] = mg_guid
+            props.insert(0, mg)
+            report["masterGroup"] = mg["label"]
+
+        icon_bytes = _prepare_icon(thumbnail)
         skel["level"] = level
         skel["customMaterials"] = entries
         skel["props"] = props
-        skel["bHasDedicatedIcon"] = False
-        _write_zip(dest_path, name, skel, tex_bytes, model_bytes)
+        skel["bHasDedicatedIcon"] = bool(icon_bytes)
+        report["thumbnail"] = bool(icon_bytes)
+        _write_zip(dest_path, name, skel, tex_bytes, model_bytes, icon_bytes=icon_bytes)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
