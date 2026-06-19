@@ -76,9 +76,20 @@ def test_two_material_sections():
     assert "f 1/5 2/6 3/7 4/8" in L
 
 
-def test_empty_slot_is_named_None():
+def test_empty_slot_emits_empty_name_not_None():
+    # parity with wm.obj_export: an empty slot keeps its empty name (the section ORDER is what WL
+    # maps to CustomMaterial{i}); we must never invent a "None" section.
     a = _quad(slots=("",), mat_index=(0,))
-    assert "usemtl None" in _lines(obj_export.format_obj_text(a, None))
+    L = _lines(obj_export.format_obj_text(a, None))
+    assert "usemtl None" not in L
+    assert any(x.startswith("usemtl") for x in L)
+
+
+def test_no_material_slots_emits_no_usemtl():
+    # a mesh with no material slots emits no usemtl at all (matches wm.obj_export).
+    a = _quad(slots=(), mat_index=(0,))
+    L = _lines(obj_export.format_obj_text(a, None))
+    assert not any(x.startswith("usemtl") for x in L)
 
 
 def run():

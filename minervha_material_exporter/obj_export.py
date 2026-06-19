@@ -246,12 +246,16 @@ def format_obj_text(arrays, mtl_name=None):
         out.extend("vn %.6f %.6f %.6f" % (n[0], n[1], n[2]) for n in normals)
     has_uv = uvs is not None
     has_n = normals is not None
+    has_mats = bool(slots)                              # a mesh with NO material slots emits no usemtl
     cur = None
     for f in range(len(ls)):
-        m = int(mi[f])
-        if m != cur:
-            cur = m
-            out.append("usemtl " + (slots[m] if 0 <= m < len(slots) and slots[m] else "None"))
+        if has_mats:
+            m = int(mi[f])
+            if m != cur:
+                cur = m
+                # raw slot name (may be "" for an empty slot) — matches wm.obj_export exactly, so the
+                # section ORDER WL maps to CustomMaterial{i} is identical. NEVER invent a "None" section.
+                out.append("usemtl " + (slots[m] if 0 <= m < len(slots) else ""))
         s = int(ls[f]); c = int(lt[f])
         seq = range(s + c - 1, s - 1, -1) if mirrored else range(s, s + c)
         refs = []
@@ -336,17 +340,18 @@ def write_obj_direct(src_object, dest_dir, used_basenames, write_mtl=True, globa
         arrays = _read_obj_arrays(src_object, global_scale)
         if arrays is None:
             return None
-        mtl_name = (os.path.splitext(base)[0] + ".mtl") if write_mtl else None
+        # A mesh with no material slots gets no .mtl / mtllib (parity with wm.obj_export).
+        has_mats = bool(arrays["slots"])
+        mtl_name = (os.path.splitext(base)[0] + ".mtl") if (write_mtl and has_mats) else None
         obj_text = format_obj_text(arrays, mtl_name)
         with open(dest, "w", encoding="utf-8") as f:
             f.write(obj_text)
-        if write_mtl:
-            # newmtl for every slot (like wm.obj_export), then reorder to usemtl/slot order.
-            names = sorted(dict.fromkeys((n or "None") for n in arrays["slots"]))
-            if names:
-                raw = "".join("newmtl %s\nKd 0.800000 0.800000 0.800000\n" % n for n in names)
-                with open(os.path.join(dest_dir, mtl_name), "w", encoding="utf-8") as f:
-                    f.write(reorder_mtl_blocks(obj_text, raw))
+        if mtl_name:
+            # newmtl for every slot (raw names, like wm.obj_export), then reorder to usemtl/slot order.
+            names = sorted(dict.fromkeys(arrays["slots"]))
+            raw = "".join("newmtl %s\nKd 0.800000 0.800000 0.800000\n" % n for n in names)
+            with open(os.path.join(dest_dir, mtl_name), "w", encoding="utf-8") as f:
+                f.write(reorder_mtl_blocks(obj_text, raw))
         return base if os.path.isfile(dest) and os.path.getsize(dest) > 0 else None
     except Exception:
         return None

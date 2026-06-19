@@ -198,7 +198,15 @@ far more on the real tiny-mesh distribution: a 7682-mesh / 720k-poly scene drops
 the `wm.obj_export` operator on any failure**, so the validated path is always available. Live: 37 diverse
 meshes (multi-material / big / small) all geometry-equivalent to the operator — vertex positions ≤ 0.009 mm,
 identical UV sets, matching normal values, same usemtl section order. (bpy 4.1+ loop normals via
-`mesh.corner_normals`.) `tests/test_obj_direct.py` pins the text builder.
+`mesh.corner_normals`.) `tests/test_obj_direct.py` pins the text builder. **Edge-case validated** against the
+operator on synthetic meshes: Subdivision / Mirror / Array / Solidify modifiers, flat + custom-normal shading,
+n-gons, negative object scale, no-UV, empty material slot, and no material slots at all — all
+geometry/UV/face/section-identical. Two parity fixes from that pass: a mesh with **no material slots** emits no
+`usemtl`/`.mtl` (was inventing a "None" section), and an **empty slot** keeps its empty name (the section ORDER,
+not the name, is what WL maps). **Known divergence (intentional):** a **cross-object modifier** (Boolean /
+Shrinkwrap to another object) — the operator path sets `matrix_world` before evaluating, which moves the object
+and corrupts the modifier; the direct writer reads the evaluated mesh at the object's real position, so it is
+*more* correct there, not identical to the old output.
 
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
