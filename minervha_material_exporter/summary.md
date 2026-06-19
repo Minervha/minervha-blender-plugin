@@ -67,6 +67,19 @@ albedo to "UNKNOWN" — **257→~0** such silent albedo drops in the test scene.
 mesh selection (`mat_obj`/`objs`). Plan + chunks:
 [`../docs/plans/features/bake-on-placeholder/plan.md`](../docs/plans/features/bake-on-placeholder/plan.md).
 
+**Export optimizations — chunk-01 (bake size, validated live Blender 5.1.2).** Baked channels shipped as a
+fixed-2048² **PNG even with *Prefer JPG* on**: `bake.bake_channel` removed its target image right after
+saving, so the texture pre-pass could no longer re-encode it (no bpy image → assumed alpha → kept PNG) — a
+526-material scene ballooned **245 MB → 1.1 GB**. Fix: `bake_channel` writes the **final format directly**
+(`image_format`/`jpg_quality`; bake targets are `alpha=False`, so JPEG is always valid); `ui._make_material_baker`
+picks JPG/PNG from the user's `tex_opts` and `wlsave_export._process_textures` **skips `baked` textures**
+(already final); the bake runs at an **adaptive resolution** (`ui._adaptive_bake_res` = the material's largest
+source texture, rounded to a power of two, capped by the Bake-resolution dropdown — **now a ceiling** —, floor
+512, procedural-only 1024). Live on `Scene_ResortMadness`: `concreteceiling001a` (512² sources) **6.0 MB
+PNG@2048 → 114 KB JPEG@512**; **1100/1146** materials bake below the old fixed 2048². Commit `506d970`. Plan:
+[`../docs/plans/features/export-optimizations/plan.md`](../docs/plans/features/export-optimizations/plan.md)
+(chunks 02 unused-materials / 03 final-textures-only / 04 report+docs pending).
+
 **Missing-texture detail.** `wlsave_export._build_material_entries` emits `report["missingDetail"]` — per
 texture (grouped), the **material(s) + consumer mesh(es) + channel(s) + reason** (`packed`/`generated`/`udim`/
 `missing path`/`file not found`) for everything that did NOT make it into the bundle. `ui.py` shows the first
