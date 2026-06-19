@@ -170,6 +170,15 @@ def _export_image(image_name, dest_dir, used, target_format, jpg_quality, max_re
     dest = os.path.join(dest_dir, base)
     tmp = img.copy()
     try:
+        # Materialize the pixel buffer BEFORE touching file_format. A file image that was
+        # never displayed (typical for a .tga normal map) loads lazily — has_data stays False
+        # until something reads it. The old order set file_format='PNG' first, so save()'s lazy
+        # load then tried to decode the SOURCE .tga as PNG and raised, which the broad except
+        # swallowed: every .tga was silently dropped and the raw (game-unreadable) file copied
+        # as-is. Reading one pixel forces the load in the source's own format; packed/generated
+        # images already have data, so this is a no-op for them.
+        if not tmp.has_data:
+            tmp.pixels[0]
         if max_res:
             w, h = int(tmp.size[0]), int(tmp.size[1])
             if w and h and (w > max_res or h > max_res):
