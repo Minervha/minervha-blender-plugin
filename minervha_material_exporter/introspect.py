@@ -275,8 +275,49 @@ def normalize_material(mat):
         "consumedByNoUvObject": False,  # set by collect() once object context is known
         "dynamicChannels": dynamic_channels,
         "lossyFeatures": lossy_features,
+        "perMeshDependency": _per_mesh_dependency(mat),
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,
     }
+
+
+_PERMESH_NODE_REASON = {
+    "VERTEX_COLOR": "vertex-color", "ATTRIBUTE": "attribute",
+    "NEW_GEOMETRY": "geometry", "BEVEL": "geometry",
+    "AMBIENT_OCCLUSION": "geometry", "WIREFRAME": "geometry",
+}
+_NONUV_COORD_OUTPUTS = {"Generated", "Object", "Camera", "Window", "Reflection", "Normal"}
+_PROCEDURAL_TEX = {"TEX_NOISE", "TEX_VORONOI", "TEX_MUSGRAVE", "TEX_WAVE", "TEX_MAGIC",
+                   "TEX_GRADIENT", "TEX_CHECKER", "TEX_BRICK"}
+
+
+def _per_mesh_dependency(mat):
+    """Reasons a material's look depends on PER-MESH data (vertex colors / attributes / object-space
+    coords / geometry) and so cannot be faithfully flattened to ONE shared baked texture — every mesh
+    would need its own. Walks the node tree + nested groups; empty = UV-pure (a single placeholder-plane
+    bake is exact). Threaded to the report so a baked-but-approximated material is flagged, not silent."""
+    if not mat or not mat.use_nodes or mat.node_tree is None:
+        return []
+    seen, stack, reasons = set(), [mat.node_tree], set()
+    while stack:
+        nt = stack.pop()
+        if nt is None or nt.name in seen:
+            continue
+        seen.add(nt.name)
+        for n in nt.nodes:
+            t = n.type
+            if t == "GROUP" and getattr(n, "node_tree", None):
+                stack.append(n.node_tree)
+            elif t in _PERMESH_NODE_REASON:
+                if any(o.is_linked for o in n.outputs):
+                    reasons.add(_PERMESH_NODE_REASON[t])
+            elif t == "TEX_COORD":
+                if any(o.name in _NONUV_COORD_OUTPUTS and o.is_linked for o in n.outputs):
+                    reasons.add("object-space")
+            elif t in _PROCEDURAL_TEX:
+                v = n.inputs.get("Vector")
+                if v is not None and not v.is_linked:
+                    reasons.add("object-space")        # unconnected Vector -> Generated coords
+    return sorted(reasons)
 
 
 def _materials_for_scope(scope, objects):

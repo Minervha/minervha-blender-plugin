@@ -74,7 +74,7 @@ _BAKE_CH_SLOT = {"diffuse": "Base Color", "roughness": "Roughness", "metallic": 
                  "normal": "Normal", "emissive": "Emission Color"}
 
 
-def _make_material_baker(objs, tex_dir, resolution):
+def _make_material_baker(tex_dir, resolution):
     """Build the Scene-mode bake pre-pass passed to wlsave_export.build_scene_wlsave.
 
     Bakes the channels mapper flagged as `bakeCandidates` (procedural / multi-texture /
@@ -229,7 +229,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         bake_tmp, baker = None, None
         if context.scene.minervha_bake:
             bake_tmp = tempfile.mkdtemp(prefix="wlsave_bake_")
-            baker = _make_material_baker(objs, bake_tmp, int(context.scene.minervha_bake_res))
+            baker = _make_material_baker(bake_tmp, int(context.scene.minervha_bake_res))
         try:
             report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
                                                       position_scale=world_scale, level=level,
@@ -239,10 +239,11 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             if bake_tmp:
                 shutil.rmtree(bake_tmp, ignore_errors=True)
         baked_n = len(report.get('materialsBaked') or [])
-        self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV, %d baked)" % (
+        approx_n = len(report.get('materialsApproximated') or [])
+        self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV, %d baked, %d approx)" % (
             self.filepath, ("map '%s'" % level) if level else "collection",
             len(report['objectsExported']), len(report['meshesWritten']),
-            len(report['created']), len(report['noUv']), baked_n))
+            len(report['created']), len(report['noUv']), baked_n, approx_n))
         self._popup(context, report)
         return {'FINISHED'}
 
@@ -299,6 +300,8 @@ def _popup_report(context, report):
                 layout.label(text="Objects without UVs: %d" % len(report['noUv']), icon='ERROR')
             if report.get('materialsBaked'):
                 layout.label(text="Channels baked: %d" % len(report['materialsBaked']), icon='RENDER_STILL')
+            if report.get('materialsApproximated'):
+                layout.label(text="Approximated (per-mesh data): %d" % len(report['materialsApproximated']), icon='INFO')
             if report['proceduralMaterials']:
                 icon = 'INFO' if report.get('materialsBaked') else 'ERROR'
                 layout.label(text="Procedural materials: %d (enable Bake)" % len(report['proceduralMaterials']), icon=icon)

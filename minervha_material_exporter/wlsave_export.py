@@ -459,7 +459,8 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
     report = _new_report(name, name_original, dest_path)
     report.update({"objectsExported": [], "objectsSkipped": [], "noUv": [],
                    "proceduralMaterials": [], "meshesWritten": [], "meshExportFailed": [],
-                   "materialsBaked": [], "materialNamespaced": True, "level": level})
+                   "materialsBaked": [], "materialsApproximated": [],
+                   "materialNamespaced": True, "level": level})
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_scene_")
     try:
@@ -467,6 +468,13 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
         # BEFORE mapping, so _process_textures/mapper see them as ordinary path textures.
         if material_baker is not None:
             report["materialsBaked"] = material_baker(norms) or []
+            # A baked material whose look depends on per-mesh data (vertex colors / object-space)
+            # can't be faithful as ONE shared texture — flag it (baked to a representative state).
+            _baked_names = {b[0] for b in report["materialsBaked"]}
+            report["materialsApproximated"] = [
+                {"material": n.get("name"), "reasons": n.get("perMeshDependency")}
+                for n in norms
+                if n.get("name") in _baked_names and n.get("perMeshDependency")]
         entries, tex_bytes, material_names = _build_material_entries(norms, name, report, tmpdir, tex_opts)
 
         # One OBJ per unique mesh datablock (instances reuse it).
