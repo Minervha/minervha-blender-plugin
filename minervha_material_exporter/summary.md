@@ -171,6 +171,19 @@ tick, still ~20 progress updates/sec). Live: device CPU→GPU during bake, resto
 stays single-thread-orchestrated — parallelising it would mean replacing the in-game-calibrated `wm.obj_export`
 path, deferred.)
 
+**Bake isolation — the real bake-speed fix (validated live Blender 5.1.2).** Measured on a live export: the
+bake phase ran at **0.4 bakes/sec (~2.5 s each)** with the GPU at <20% / 54 W — the export "used almost
+nothing and crawled". Root cause: `bpy.ops.object.bake()` syncs the **whole active scene** to the render
+device every call, so baking the placeholder plane in the user's 14740-object scene re-uploaded every object +
+texture per bake. Fix: `bake.bake_environment` now creates a **throwaway isolated scene** holding only the
+placeholder plane and bakes there via a `temp_override(scene=…)` — Cycles syncs one object, the user's scene
+and render settings are never touched. Also removed a latent waste: `placeholder_plane` called
+`bpy.context.view_layer.update()`, which re-evaluated the USER scene's (10k-object) depsgraph every bake
+(~0.3 s); it now updates the isolated scene's view layer (instant). Live: **3.8× faster** per bake
+(2.6 s → 0.69 s, the remainder is the genuine 2048² GPU bake), **pixel-identical output** (max diff 0), bake
+scene cleaned up, user scene unchanged. Threaded the isolated `scene` through `bake_channel` /
+`placeholder_plane` / `_bake_into` / `_bake_alpha_into`; the baker passes the `bake_environment` scene.
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);

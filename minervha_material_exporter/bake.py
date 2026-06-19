@@ -65,39 +65,26 @@ def _gpu_available():
 
 @contextmanager
 def bake_environment(samples=1):
-    """Swap to CYCLES with flat-pass settings, restoring ALL touched render/scene state on exit.
-    Bake passes here are unlit, so 1 sample + no denoise is enough and fast. Bakes on the **GPU**
-    when one is configured (the scene's Cycles device is usually CPU) — a big speedup for a
-    bake-heavy export, and the only place the export touches the GPU at all."""
-    scene = bpy.context.scene
-    snap = {
-        "engine": scene.render.engine,
-        "samples": scene.cycles.samples,
-        "denoise": scene.cycles.use_denoising,
-        "device": scene.cycles.device,
-        "active": bpy.context.view_layer.objects.active,
-        "selected": list(bpy.context.selected_objects),
-    }
+    """Yield a throwaway ISOLATED scene that will hold ONLY the bake placeholder plane, configured
+    for a fast unlit CYCLES bake on the GPU when available.
+
+    Why a separate scene: `bpy.ops.object.bake()` syncs the *whole* active scene to the render
+    device every call. Baking the placeholder plane in the user's 10k-object scene therefore
+    re-uploads every object + texture per bake — measured at ~2.5 s/bake (GPU starved at <20%),
+    so a bake-heavy export crawls. Baking in a scene that contains only the plane (the bake is
+    unlit COLOR/EMIT, so it needs nothing else) syncs one object → milliseconds per bake. The
+    user's scene and its render settings are never touched; the temp scene is removed on exit."""
+    bake_scene = bpy.data.scenes.new("_wl_bake_scene")
     try:
-        scene.render.engine = "CYCLES"
-        scene.cycles.samples = samples
-        scene.cycles.use_denoising = False
+        bake_scene.render.engine = "CYCLES"
+        bake_scene.cycles.samples = samples
+        bake_scene.cycles.use_denoising = False
         if _gpu_available():
-            scene.cycles.device = "GPU"               # offload the bake to the GPU when available
-        yield
+            bake_scene.cycles.device = "GPU"          # offload the bake to the GPU when available
+        yield bake_scene
     finally:
-        scene.render.engine = snap["engine"]          # restore the LITERAL engine id
-        scene.cycles.samples = snap["samples"]
-        scene.cycles.use_denoising = snap["denoise"]
-        scene.cycles.device = snap["device"]
-        try:
-            bpy.ops.object.select_all(action="DESELECT")
-            for o in snap["selected"]:
-                if o.name in bpy.data.objects:
-                    o.select_set(True)
-            bpy.context.view_layer.objects.active = snap["active"]
-        except Exception:
-            pass
+        if bake_scene.name in bpy.data.scenes:
+            bpy.data.scenes.remove(bake_scene)
 
 
 def ensure_uv(obj):
@@ -142,15 +129,14 @@ def _active_output(mat):
 
 
 @contextmanager
-def placeholder_plane(mat):
-    """Yield a throwaway unit plane whose UV map fills the WHOLE [0,1]² tile, carrying only `mat`.
+def placeholder_plane(mat, scene):
+    """Yield a throwaway unit plane whose UV map fills the WHOLE [0,1]² tile, carrying only `mat`,
+    linked into the ISOLATED bake `scene` (from `bake_environment`).
 
     Baking the material here captures its flattened output over the ENTIRE UV domain — not one scene
     mesh's islands — so a single texture is correct for every mesh that shares the material (each
-    samples it through its own UVs). The plane lives in the scene master collection (always
-    render-enabled, never excluded) and is fully removed (object + mesh) on exit. Because we never
-    bake a scene mesh, render-disabled objects/collections are a non-issue."""
-    scene = bpy.context.scene
+    samples it through its own UVs). The plane is the ONLY object in the bake scene, so a bake syncs
+    just it. Fully removed (object + mesh) on exit."""
     mesh = bpy.data.meshes.new("_wl_bake_plane")
     mesh.from_pydata([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)],
                      [], [(0, 1, 2, 3)])
@@ -163,7 +149,11 @@ def placeholder_plane(mat):
     obj.hide_render = False
     scene.collection.objects.link(obj)
     try:
-        bpy.context.view_layer.update()
+        # NB: do NOT call bpy.context.view_layer.update() here — context.view_layer is the USER's
+        # heavy scene, so that re-evaluates its whole (10k-object) depsgraph per bake (~0.3 s wasted,
+        # and the wrong scene). The bake operator runs under temp_override(scene=bake_scene) and
+        # evaluates the isolated scene's depsgraph itself, which is all that's needed.
+        scene.view_layers[0].update()
         yield obj
     finally:
         try:
@@ -176,9 +166,10 @@ def placeholder_plane(mat):
             bpy.data.meshes.remove(mesh)
 
 
-def _bake_into(plane, mat, img, bake_type, **kw):
-    """Add a target Image Texture node bound to `img`, make it the active/selected node and `plane`
-    the active/selected object, bake, then remove the node. Caller owns image + plane teardown."""
+def _bake_into(plane, mat, img, bake_type, scene, **kw):
+    """Add a target Image Texture node bound to `img`, make it the active/selected node, then bake
+    the `plane` IN THE ISOLATED `scene` via a context override (so Cycles syncs only the plane, not
+    the user's scene). Removes the node after. Caller owns image + plane teardown."""
     nt = mat.node_tree
     node = nt.nodes.new("ShaderNodeTexImage")
     node.image = img
@@ -187,10 +178,11 @@ def _bake_into(plane, mat, img, bake_type, **kw):
             n.select = False
         node.select = True
         nt.nodes.active = node
-        bpy.ops.object.select_all(action="DESELECT")
-        plane.select_set(True)
-        bpy.context.view_layer.objects.active = plane
-        bpy.ops.object.bake(type=bake_type, **kw)
+        vl = scene.view_layers[0]
+        with bpy.context.temp_override(scene=scene, view_layer=vl,
+                                       active_object=plane, object=plane,
+                                       selected_objects=[plane], selected_editable_objects=[plane]):
+            bpy.ops.object.bake(type=bake_type, **kw)
     finally:
         nt.nodes.remove(node)
 
@@ -221,7 +213,7 @@ def _emit_rewire(mat, input_name):
     return restore
 
 
-def _bake_alpha_into(plane, mat, img):
+def _bake_alpha_into(plane, mat, img, scene):
     """Fill RGBA `img`'s ALPHA channel from the material's Principled Alpha input, so a baked
     Base Color carries its transparency mask (otherwise a Masked/alpha-tested look is lost — the
     flat RGB diffuse bake has no mask). A LINKED Alpha is EMIT-baked (captures the mask graph /
@@ -240,7 +232,7 @@ def _bake_alpha_into(plane, mat, img):
         restore = _emit_rewire(mat, "Alpha")
         try:
             if restore is not None:
-                _bake_into(plane, mat, tmp, "EMIT")
+                _bake_into(plane, mat, tmp, "EMIT", scene)
                 b = np.empty(len(tmp.pixels), dtype=np.float32)
                 tmp.pixels.foreach_get(b)
                 a[3::4] = b[0::4]                       # EMIT red = alpha -> target A channel
@@ -256,7 +248,7 @@ def _bake_alpha_into(plane, mat, img):
 
 
 def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_quality=90,
-                 bake_alpha=False):
+                 bake_alpha=False, scene=None):
     """Bake one WL channel of `mat` to `out_path` on a throwaway full-UV placeholder plane
     (NEVER a scene mesh); return the path, or None if the channel is not bakeable here (constant
     input / unknown channel). Must run inside `bake_environment()`. One bake per material -> one
@@ -275,6 +267,8 @@ def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_qua
     if spec is None:
         return None
     bake_type, colorspace, rewire_input = spec
+    if scene is None:                                  # no isolated scene given -> bake in the active
+        scene = bpy.context.scene                      # one (un-isolated, legacy path)
 
     want_alpha = bool(bake_alpha) and channel == "diffuse"
     if want_alpha:
@@ -293,10 +287,10 @@ def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_qua
         elif bake_type == "NORMAL":
             kw["normal_space"] = "TANGENT"
 
-        with placeholder_plane(mat) as plane:
-            _bake_into(plane, mat, img, bake_type, **kw)
+        with placeholder_plane(mat, scene) as plane:
+            _bake_into(plane, mat, img, bake_type, scene, **kw)
             if want_alpha:
-                _bake_alpha_into(plane, mat, img)      # composite the mask into the A channel
+                _bake_alpha_into(plane, mat, img, scene)   # composite the mask into the A channel
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         img.filepath_raw = out_path

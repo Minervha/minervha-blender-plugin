@@ -227,7 +227,7 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
                 todo.append((norm, mat, chans))
         if not todo or not bake.can_bake():
             return baked
-        with bake.bake_environment():
+        with bake.bake_environment() as bake_scene:
             for i, (norm, mat, chans) in enumerate(todo, 1):
                 yield ("bake", i, len(todo))
                 res = _adaptive_bake_res(mat, ceiling, max_res)
@@ -240,7 +240,8 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
                     safe = wlsave_export._sanitize_name(mat.name, "mat")
                     out = os.path.join(tex_dir, "%s_%s%s" % (safe, ch, ch_ext))
                     path = bake.bake_channel(mat, ch, res, out, image_format=ch_fmt,
-                                             jpg_quality=jpg_quality, bake_alpha=ch_alpha)
+                                             jpg_quality=jpg_quality, bake_alpha=ch_alpha,
+                                             scene=bake_scene)
                     if not path:
                         continue
                     slot = _BAKE_CH_SLOT[ch]
