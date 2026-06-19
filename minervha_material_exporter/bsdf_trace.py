@@ -85,6 +85,53 @@ def trace_from_texture(texture_node, node_tree, parent_map):
     return sorted(found_slots)
 
 
+def images_feeding_input(start_socket, node_tree, parent_map):
+    """Backward-trace an input socket to the set of distinct Image datablock names feeding it
+    (through Mix / Math / Separate / Combine / Reroute / node groups). Detects a channel built from a
+    BLEND of >=2 textures — which the flat WL slot can't hold (the forward `trace_from_texture`
+    attributes only one texture per slot, dropping the rest to 'UNKNOWN'). Bake to flatten.
+
+    Visited is keyed by (tree name, node name) — stable and collision-free. Keying on `id(socket)`
+    mis-dedups (bpy re-creates socket wrappers, so freed ids get reused) and dead-ends multi-Mix
+    chains, which silently under-counts the textures."""
+    if start_socket is None or not start_socket.is_linked:
+        return set()
+    images = set()
+    stack = [(l.from_node, l.from_socket, node_tree) for l in start_socket.links]
+    visited = set()
+    while stack:
+        node, from_sock, tree = stack.pop()
+        key = (tree.name, node.name)
+        if key in visited:
+            continue
+        visited.add(key)
+        if node.type == 'TEX_IMAGE':
+            if node.image is not None:
+                images.add(node.image.name)
+            continue
+        if node.type == 'GROUP_INPUT':
+            idx = next((i for i, out in enumerate(node.outputs) if out == from_sock), None)
+            if idx is not None:
+                for p_node, p_tree in parent_map.get(tree, []):
+                    if idx < len(p_node.inputs) and p_node.inputs[idx].is_linked:
+                        for l in p_node.inputs[idx].links:
+                            stack.append((l.from_node, l.from_socket, p_tree))
+            continue
+        if node.type == 'GROUP' and node.node_tree:
+            idx = next((i for i, out in enumerate(node.outputs) if out == from_sock), None)
+            if idx is not None:
+                for go in node.node_tree.nodes:
+                    if go.type == 'GROUP_OUTPUT' and idx < len(go.inputs) and go.inputs[idx].is_linked:
+                        for l in go.inputs[idx].links:
+                            stack.append((l.from_node, l.from_socket, node.node_tree))
+            continue
+        # generic node (MIX / MATH / SEPARATE / COMBINE / MAPPING / ...): recurse all linked inputs
+        for inp in node.inputs:
+            for l in inp.links:
+                stack.append((l.from_node, l.from_socket, tree))
+    return images
+
+
 def find_mapping_for_texture(tex_node, node_tree, parent_map):
     """Backward-trace a texture's Vector input to its Mapping node, if any."""
     vector_input = tex_node.inputs.get('Vector')

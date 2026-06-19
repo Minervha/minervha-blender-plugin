@@ -245,6 +245,27 @@ def normalize_material(mat):
     if "Normal" not in slot_set and _input_linked("Normal"):
         dynamic_channels.append("normal")
 
+    # A Principled color/scalar channel fed by >=2 distinct image textures is a BLEND the flat WL
+    # slot cannot hold (the common model pattern: real albedo x tiled-detail x object-color -> Mix).
+    # The forward texture->slot trace attributes only ONE texture per slot; the others land "UNKNOWN"
+    # and were silently dropped, so the channel shipped the WRONG single texture (often a tiled detail
+    # while the real albedo was discarded). Count images backward from the input and flag the channel
+    # for baking — the placeholder-plane bake flattens the blend correctly.
+    multi_texture_channels = []
+    for input_name, ch in (("Base Color", "diffuse"), ("Metallic", "metallic"),
+                           ("Roughness", "roughness"), ("Emission Color", "emissive")):
+        imgs = set()
+        for p_node, p_tree in principled:
+            inp = p_node.inputs.get(input_name)
+            if inp is None and input_name == "Emission Color":
+                inp = p_node.inputs.get("Emission")
+            if inp is not None and inp.is_linked:
+                imgs |= bsdf_trace.images_feeding_input(inp, p_tree, parent_map)
+            if len(imgs) >= 2:
+                break
+        if len(imgs) >= 2:
+            multi_texture_channels.append(ch)
+
     # Irreducible losses: Principled features with no WL slot (not even via baking).
     lossy_features = []
     for p_node, _ in principled:
@@ -274,6 +295,7 @@ def normalize_material(mat):
         "projectionMapped": projection_mapped,
         "consumedByNoUvObject": False,  # set by collect() once object context is known
         "dynamicChannels": dynamic_channels,
+        "multiTextureChannels": multi_texture_channels,
         "lossyFeatures": lossy_features,
         "perMeshDependency": _per_mesh_dependency(mat),
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,

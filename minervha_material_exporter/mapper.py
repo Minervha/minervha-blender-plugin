@@ -134,6 +134,14 @@ def map_material(norm):
             report["notes"].append(f"{ch}: driven by a procedural / node graph — bake to flatten")
             _bake_candidate(ch, "procedural")
 
+    # Channels built from a BLEND of >=2 image textures (introspect counts them backward from the
+    # Principled input). first-wins kept ONE texture in the channel, but a single image is not the
+    # blend — the others were dropped to "UNKNOWN". Bake to flatten the real result. Fires even when
+    # a texture already filled the channel (the bake replaces it).
+    for ch in (norm.get("multiTextureChannels") or []):
+        report["notes"].append(f"{ch}: blended from multiple textures — bake to flatten")
+        _bake_candidate(ch, "multi-texture")
+
     # Irreducible losses: shader features the flat WL struct has no slot for (anisotropy,
     # coat, sheen, true geometric displacement, ...). introspect detects them; surface each
     # so the user knows it was dropped (there is no faithful target, not even via baking).
