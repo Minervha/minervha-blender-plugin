@@ -87,7 +87,7 @@ def map_material(norm):
         return None
 
     report = {"name": norm.get("name"), "ignoredSlots": [], "unresolvedTextures": [],
-              "notes": [], "bakeCandidates": []}
+              "notes": [], "bakeCandidates": [], "needsBake": []}
     channel_tex = {}  # channel -> chosen texture (first-wins; dict preserves insertion order)
     has_alpha = False
 
@@ -99,6 +99,12 @@ def map_material(norm):
             report["bakeCandidates"].append(rec)
 
     for tex in (norm.get("textures") or []):
+        is_baked = bool(tex.get("baked"))
+        # directSlots = slots the texture feeds DIRECTLY (it IS that channel's map). Absent (older
+        # norm / fixtures) -> treat every slot as direct, so behavior is unchanged. A baked texture
+        # is always direct.
+        _ds = tex.get("directSlots")
+        direct = set(tex.get("slots") or []) if _ds is None else set(_ds)
         for slot in (tex.get("slots") or []):
             if _ALPHA_RE.match(str(slot)):
                 has_alpha = True
@@ -106,6 +112,14 @@ def map_material(norm):
             ch = channel_for_slot(slot)
             if not ch:
                 report["ignoredSlots"].append({"slot": slot, "texture": tex.get("name")})
+                continue
+            # Only a DIRECT (or baked) texture is the channel's final map. A slot reached only through
+            # a transforming node graph (Mix / Math / ColorRamp / ...) means the texture is a procedural
+            # INPUT, not the map — flag it for baking and never ship it raw (it would be a wrong guess).
+            if not is_baked and slot not in direct:
+                report["notes"].append(
+                    f"{ch}: '{tex.get('name')}' feeds it through a node graph (not a direct map) — bake to flatten")
+                _bake_candidate(ch, "procedural")
                 continue
             if tex.get("fileKind") != "path":
                 # packed / generated / missing / udim — no single file to copy
@@ -141,6 +155,19 @@ def map_material(norm):
     for ch in (norm.get("multiTextureChannels") or []):
         report["notes"].append(f"{ch}: blended from multiple textures — bake to flatten")
         _bake_candidate(ch, "multi-texture")
+
+    # Don't ship a single guessed texture for a channel that genuinely needs baking — a blend of >=2
+    # images (multi-texture) or a procedural / transformed graph. A BAKED texture is faithful and kept;
+    # otherwise drop the guess (a wrong first-wins pick — a mask mistaken for the albedo) and record the
+    # channel as awaiting a bake. orm-packed / divergent-uv / rotation keep their (valid) primary texture.
+    _DROP_REASONS = {"multi-texture", "procedural"}
+    for ch in sorted({bc["channel"] for bc in report["bakeCandidates"] if bc["reason"] in _DROP_REASONS}):
+        tex = channel_tex.get(ch)
+        if tex is not None and tex.get("baked"):
+            continue
+        if tex is not None:
+            del channel_tex[ch]
+        report["needsBake"].append(ch)
 
     # Irreducible losses: shader features the flat WL struct has no slot for (anisotropy,
     # coat, sheen, true geometric displacement, ...). introspect detects them; surface each

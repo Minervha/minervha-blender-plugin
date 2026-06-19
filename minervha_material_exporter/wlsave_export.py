@@ -221,6 +221,11 @@ def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=N
             if t.get("baked"):
                 continue  # the baker already wrote the final format/resolution; re-encoding here
                           # would only fail (its bpy image is gone) and silently keep the raw PNG
+            slots = t.get("slots") or []
+            ds = t.get("directSlots")
+            check = slots if ds is None else ds   # only DIRECT slots ship; absent -> all slots (compat)
+            if slots and not any(mapper.channel_for_slot(s) for s in check):
+                continue  # feeds no WL channel directly (pure helper / transformed) -> never bundled raw
             kind = t.get("fileKind")
             if kind in ("missing", "udim"):
                 continue  # nothing to re-export (UDIM unsupported in v1)
@@ -266,7 +271,7 @@ def _new_report(name, name_original, dest_path):
         "name": name, "nameOriginal": name_original, "dest": dest_path,
         "created": [], "renamed": [], "skipped": [],
         "texturesCopied": [], "texturesReExported": [], "texturesMissing": [],
-        "texturesRenamed": [], "missingDetail": [],
+        "texturesRenamed": [], "missingDetail": [], "needsBake": [],
     }
 
 
@@ -332,6 +337,10 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
         for u in m["report"].get("unresolvedTextures", []):
             _flag_missing(u.get("texture"), u.get("fileKind") or "unresolved",
                           u.get("channel"), orig, objs)
+        # channels left empty because the texture was procedural/blended and not baked (Bake off).
+        nb = m["report"].get("needsBake") or []
+        if nb:
+            report["needsBake"].append({"material": orig, "channels": nb})
         for t in m["textures"]:
             raw = t.get("basename")
             if not raw:

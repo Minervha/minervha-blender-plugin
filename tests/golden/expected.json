@@ -54,7 +54,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -131,7 +132,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -196,7 +198,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -261,7 +264,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -324,7 +328,8 @@
       ],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -384,7 +389,8 @@
       "notes": [
         "emission strength 6.667 folded into emissiveColor (HDR, unclamped)"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -444,7 +450,8 @@
       "notes": [
         "emission strength 0.5 folded into emissiveColor"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -525,7 +532,8 @@
           "channel": "roughness",
           "reason": "packed"
         }
-      ]
+      ],
+      "needsBake": []
     }
   },
   {
@@ -603,7 +611,8 @@
           "channel": "roughness",
           "reason": "orm-packed"
         }
-      ]
+      ],
+      "needsBake": []
     }
   },
   null,
@@ -675,7 +684,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -733,7 +743,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -791,7 +802,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -880,7 +892,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -940,7 +953,8 @@
       "notes": [
         "emission strength 4.0 folded into emissiveColor (HDR, unclamped)"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -998,7 +1012,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1056,7 +1071,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1114,7 +1130,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1172,7 +1189,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1230,7 +1248,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1290,7 +1309,8 @@
       "notes": [
         "surface_render_method=BLENDED / raytrace_refraction drove Transparent"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1348,7 +1368,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1406,7 +1427,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1466,7 +1488,8 @@
       "notes": [
         "refraction defaulted to 1.45 (no static IOR source)"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1524,7 +1547,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1582,7 +1606,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1640,7 +1665,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1698,7 +1724,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1756,7 +1783,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1816,7 +1844,8 @@
       "notes": [
         "surface_render_method=BLENDED / raytrace_refraction drove Transparent"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1876,7 +1905,8 @@
       "notes": [
         "emission strength 5.0 folded into emissiveColor (HDR, unclamped)"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -1941,7 +1971,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -2008,7 +2039,8 @@
       "notes": [
         "bIsTriplanar inferred from a consumer mesh without UVs (no projection node)"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -2060,14 +2092,7 @@
       },
       "refraction": 1
     },
-    "textures": [
-      {
-        "channel": "diffuse",
-        "field": "diffuseTexturePath",
-        "srcPath": "C:/tex/BaseRock.png",
-        "basename": "BaseRock.png"
-      }
-    ],
+    "textures": [],
     "report": {
       "name": "MultiTexBaseColor",
       "ignoredSlots": [],
@@ -2080,6 +2105,9 @@
           "channel": "diffuse",
           "reason": "multi-texture"
         }
+      ],
+      "needsBake": [
+        "diffuse"
       ]
     }
   },
@@ -2158,7 +2186,8 @@
           "channel": "normal",
           "reason": "divergent-uv"
         }
-      ]
+      ],
+      "needsBake": []
     }
   },
   {
@@ -2230,7 +2259,8 @@
           "channel": "diffuse",
           "reason": "rotation"
         }
-      ]
+      ],
+      "needsBake": []
     }
   },
   {
@@ -2308,7 +2338,8 @@
           "channel": "roughness",
           "reason": "orm-packed"
         }
-      ]
+      ],
+      "needsBake": []
     }
   },
   {
@@ -2379,7 +2410,8 @@
           "channel": "diffuse",
           "reason": "udim"
         }
-      ]
+      ],
+      "needsBake": []
     }
   },
   {
@@ -2444,6 +2476,9 @@
           "channel": "diffuse",
           "reason": "procedural"
         }
+      ],
+      "needsBake": [
+        "diffuse"
       ]
     }
   },
@@ -2515,7 +2550,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -2573,7 +2609,8 @@
       "ignoredSlots": [],
       "unresolvedTextures": [],
       "notes": [],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
     }
   },
   {
@@ -2634,7 +2671,142 @@
         "anisotropy — no WL equivalent, dropped",
         "coat — no WL equivalent, dropped"
       ],
-      "bakeCandidates": []
+      "bakeCandidates": [],
+      "needsBake": []
+    }
+  },
+  {
+    "entry": {
+      "name": "DirectDiffuse",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [
+      {
+        "channel": "diffuse",
+        "field": "diffuseTexturePath",
+        "srcPath": "C:/tex/Albedo.png",
+        "basename": "Albedo.png"
+      }
+    ],
+    "report": {
+      "name": "DirectDiffuse",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [],
+      "bakeCandidates": [],
+      "needsBake": []
+    }
+  },
+  {
+    "entry": {
+      "name": "TransformedDiffuse",
+      "type": "Opaque",
+      "diffuseTexturePath": "",
+      "normalTexturePath": "",
+      "metallicTexturePath": "",
+      "roughnessTexturePath": "",
+      "emissiveTexturePath": "",
+      "heightTexturePath": "",
+      "color": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "metallic": 0.0,
+      "specular": 0.5,
+      "roughness": 0.5,
+      "normalMapAmplification": 1,
+      "emissiveColor": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "maskedAlphaCutoff": 0.5,
+      "textureTiling": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "textureOffset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "bIsTriplanar": false,
+      "bIsTwoSided": false,
+      "bFlipGreenChannel": true,
+      "textureRandomness": 0,
+      "surfaceType": "SurfaceType_Default",
+      "textureMovement": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "refraction": 1
+    },
+    "textures": [],
+    "report": {
+      "name": "TransformedDiffuse",
+      "ignoredSlots": [],
+      "unresolvedTextures": [],
+      "notes": [
+        "diffuse: 'GrungeMask' feeds it through a node graph (not a direct map) — bake to flatten"
+      ],
+      "bakeCandidates": [
+        {
+          "channel": "diffuse",
+          "reason": "procedural"
+        }
+      ],
+      "needsBake": [
+        "diffuse"
+      ]
     }
   }
 ]

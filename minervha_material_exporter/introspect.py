@@ -177,6 +177,10 @@ def normalize_material(mat):
     projection_mapped = False
     for tex_node, tree in textures:
         slots = bsdf_trace.trace_from_texture(tex_node, tree, parent_map)
+        # Slots this texture feeds DIRECTLY (the texture IS that channel's map), vs only through a
+        # transforming node graph (a procedural input). The mapper ships direct slots; a slot reached
+        # only through a transform is baked / left empty, never shipped as a misleading raw texture.
+        direct_slots = bsdf_trace.direct_slots_from_texture(tex_node, tree, parent_map)
         if not slots:
             slots = ["UNKNOWN (or not Principled)"]
         if bsdf_trace.texture_is_projection_mapped(tex_node, tree, parent_map):
@@ -200,7 +204,7 @@ def normalize_material(mat):
         tex_list.append({
             "name": image.name, "file": file_str, "fileKind": c["kind"],
             "path": c["path"], "basename": c["basename"],
-            "slots": slots, "mapping": mapping,
+            "slots": slots, "directSlots": direct_slots, "mapping": mapping,
         })
 
     # Material-level (not node) properties. EEVEE-Next renamed/removed some of

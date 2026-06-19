@@ -2,10 +2,20 @@
   {
     "name": "SolidColor",
     "skipped": false,
-    "baseColor": { "r": 0.46, "g": 0.42, "b": 0.22, "a": 1 },
+    "baseColor": {
+      "r": 0.46,
+      "g": 0.42,
+      "b": 0.22,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.1,
-    "emissionColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "emissionColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 1
+    },
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": []
@@ -16,16 +26,78 @@
     "baseColor": null,
     "metallic": 0,
     "roughness": null,
-    "emissionColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "emissionColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 1
+    },
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "FuzzyNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/FuzzyNormal.png", "basename": "FuzzyNormal.png",
-        "mapping": { "loc": { "x": 0, "y": -1, "z": 0 }, "scale": { "x": 0.02, "y": 0.02, "z": 1 } } },
-      { "name": "FuzzyBaseColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/FuzzyBaseColor.png", "basename": "FuzzyBaseColor.png",
-        "mapping": { "loc": { "x": 0, "y": -1, "z": 0 }, "scale": { "x": 0.02, "y": 0.02, "z": 1 } } },
-      { "name": "FuzzyRoughness", "slots": ["Roughness"], "fileKind": "path", "path": "C:/tex/FuzzyRoughness.png", "basename": "FuzzyRoughness.png",
-        "mapping": { "loc": { "x": 0, "y": -1, "z": 0 }, "scale": { "x": 0.02, "y": 0.02, "z": 1 } } }
+      {
+        "name": "FuzzyNormal",
+        "slots": [
+          "Normal"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/FuzzyNormal.png",
+        "basename": "FuzzyNormal.png",
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          "scale": {
+            "x": 0.02,
+            "y": 0.02,
+            "z": 1
+          }
+        }
+      },
+      {
+        "name": "FuzzyBaseColor",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/FuzzyBaseColor.png",
+        "basename": "FuzzyBaseColor.png",
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          "scale": {
+            "x": 0.02,
+            "y": 0.02,
+            "z": 1
+          }
+        }
+      },
+      {
+        "name": "FuzzyRoughness",
+        "slots": [
+          "Roughness"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/FuzzyRoughness.png",
+        "basename": "FuzzyRoughness.png",
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          "scale": {
+            "x": 0.02,
+            "y": 0.02,
+            "z": 1
+          }
+        }
+      }
     ]
   },
   {
@@ -37,7 +109,16 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "MangaBaseColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/MangaBaseColor.png", "basename": "MangaBaseColor.png", "mapping": null }
+      {
+        "name": "MangaBaseColor",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/MangaBaseColor.png",
+        "basename": "MangaBaseColor.png",
+        "mapping": null
+      }
     ]
   },
   {
@@ -49,8 +130,26 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "StickerSheet", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/StickerSheet.png", "basename": "StickerSheet.png", "mapping": null },
-      { "name": "StickerSheetAlpha", "slots": ["Alpha"], "fileKind": "path", "path": "C:/tex/StickerSheetAlpha.png", "basename": "StickerSheetAlpha.png", "mapping": null }
+      {
+        "name": "StickerSheet",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/StickerSheet.png",
+        "basename": "StickerSheet.png",
+        "mapping": null
+      },
+      {
+        "name": "StickerSheetAlpha",
+        "slots": [
+          "Alpha"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/StickerSheetAlpha.png",
+        "basename": "StickerSheetAlpha.png",
+        "mapping": null
+      }
     ]
   },
   {
@@ -62,13 +161,27 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "SomeMask", "slots": ["UNKNOWN (or not Principled)"], "fileKind": "path", "path": "C:/tex/SomeMask.png", "basename": "SomeMask.png", "mapping": null }
+      {
+        "name": "SomeMask",
+        "slots": [
+          "UNKNOWN (or not Principled)"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/SomeMask.png",
+        "basename": "SomeMask.png",
+        "mapping": null
+      }
     ]
   },
   {
     "name": "LedNoEmColor",
     "skipped": false,
-    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 1,
     "emissionColor": null,
@@ -79,10 +192,20 @@
   {
     "name": "EmissiveTinted",
     "skipped": false,
-    "baseColor": { "r": 0.2, "g": 0.4, "b": 0.6, "a": 1 },
+    "baseColor": {
+      "r": 0.2,
+      "g": 0.4,
+      "b": 0.6,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
-    "emissionColor": { "r": 1, "g": 0.5, "b": 0, "a": 1 },
+    "emissionColor": {
+      "r": 1,
+      "g": 0.5,
+      "b": 0,
+      "a": 1
+    },
     "emissionStrength": 0.5,
     "normalStrength": 1,
     "textures": []
@@ -96,8 +219,28 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "ComboMap", "slots": ["Base Color", "Roughness"], "fileKind": "packed", "path": null, "basename": null,
-        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } } }
+      {
+        "name": "ComboMap",
+        "slots": [
+          "Base Color",
+          "Roughness"
+        ],
+        "fileKind": "packed",
+        "path": null,
+        "basename": null,
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      }
     ]
   },
   {
@@ -109,8 +252,28 @@
     "emissionStrength": 0,
     "normalStrength": 0.75,
     "textures": [
-      { "name": "ComboReal", "slots": ["Base Color", "Roughness"], "fileKind": "path", "path": "C:/tex/ComboReal.png", "basename": "ComboReal.png",
-        "mapping": { "loc": { "x": 0.1, "y": 0.2, "z": 0 }, "scale": { "x": 2, "y": 2, "z": 1 } } }
+      {
+        "name": "ComboReal",
+        "slots": [
+          "Base Color",
+          "Roughness"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/ComboReal.png",
+        "basename": "ComboReal.png",
+        "mapping": {
+          "loc": {
+            "x": 0.1,
+            "y": 0.2,
+            "z": 0
+          },
+          "scale": {
+            "x": 2,
+            "y": 2,
+            "z": 1
+          }
+        }
+      }
     ]
   },
   {
@@ -121,20 +284,48 @@
   {
     "name": "HeightMapped",
     "skipped": false,
-    "baseColor": { "r": 0.8, "g": 0.8, "b": 0.8, "a": 1 },
+    "baseColor": {
+      "r": 0.8,
+      "g": 0.8,
+      "b": 0.8,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.6,
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "BrickColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/BrickColor.png", "basename": "BrickColor.png", "mapping": null },
-      { "name": "BrickHeight", "slots": ["Height"], "fileKind": "path", "path": "C:/tex/BrickHeight.png", "basename": "BrickHeight.png", "mapping": null }
+      {
+        "name": "BrickColor",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/BrickColor.png",
+        "basename": "BrickColor.png",
+        "mapping": null
+      },
+      {
+        "name": "BrickHeight",
+        "slots": [
+          "Height"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/BrickHeight.png",
+        "basename": "BrickHeight.png",
+        "mapping": null
+      }
     ]
   },
   {
     "name": "GlassTransmission",
     "skipped": false,
-    "baseColor": { "r": 0.9, "g": 0.95, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 0.9,
+      "g": 0.95,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.05,
     "emissionStrength": 0,
@@ -148,7 +339,12 @@
   {
     "name": "AlphaScalarGlass",
     "skipped": false,
-    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 0.4 },
+    "baseColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 0.4
+    },
     "metallic": 0,
     "roughness": 0.2,
     "emissionStrength": 0,
@@ -161,7 +357,12 @@
   {
     "name": "FullParams",
     "skipped": false,
-    "baseColor": { "r": 0.3, "g": 0.3, "b": 0.35, "a": 1 },
+    "baseColor": {
+      "r": 0.3,
+      "g": 0.3,
+      "b": 0.35,
+      "a": 1
+    },
     "metallic": 0.8,
     "roughness": 0.25,
     "emissionStrength": 0,
@@ -173,21 +374,86 @@
     "twoSided": true,
     "alphaCutoff": 0.33,
     "textures": [
-      { "name": "MetalColor", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/MetalColor.png", "basename": "MetalColor.png",
-        "mapping": { "loc": { "x": 0.5, "y": 0.25, "z": 0 }, "scale": { "x": 3, "y": 3, "z": 1 } } },
-      { "name": "MetalNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/MetalNormal.png", "basename": "MetalNormal.png", "mapping": null },
-      { "name": "MetalRough", "slots": ["Roughness"], "fileKind": "path", "path": "C:/tex/MetalRough.png", "basename": "MetalRough.png", "mapping": null },
-      { "name": "MetalMetal", "slots": ["Metallic"], "fileKind": "path", "path": "C:/tex/MetalMetal.png", "basename": "MetalMetal.png", "mapping": null },
-      { "name": "MetalHeight", "slots": ["Height"], "fileKind": "path", "path": "C:/tex/MetalHeight.png", "basename": "MetalHeight.png", "mapping": null }
+      {
+        "name": "MetalColor",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/MetalColor.png",
+        "basename": "MetalColor.png",
+        "mapping": {
+          "loc": {
+            "x": 0.5,
+            "y": 0.25,
+            "z": 0
+          },
+          "scale": {
+            "x": 3,
+            "y": 3,
+            "z": 1
+          }
+        }
+      },
+      {
+        "name": "MetalNormal",
+        "slots": [
+          "Normal"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/MetalNormal.png",
+        "basename": "MetalNormal.png",
+        "mapping": null
+      },
+      {
+        "name": "MetalRough",
+        "slots": [
+          "Roughness"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/MetalRough.png",
+        "basename": "MetalRough.png",
+        "mapping": null
+      },
+      {
+        "name": "MetalMetal",
+        "slots": [
+          "Metallic"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/MetalMetal.png",
+        "basename": "MetalMetal.png",
+        "mapping": null
+      },
+      {
+        "name": "MetalHeight",
+        "slots": [
+          "Height"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/MetalHeight.png",
+        "basename": "MetalHeight.png",
+        "mapping": null
+      }
     ]
   },
   {
     "name": "HdrEmissiveTinted",
     "skipped": false,
-    "baseColor": { "r": 0, "g": 0, "b": 0, "a": 1 },
+    "baseColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
-    "emissionColor": { "r": 1, "g": 0.5, "b": 0.1, "a": 1 },
+    "emissionColor": {
+      "r": 1,
+      "g": 0.5,
+      "b": 0.1,
+      "a": 1
+    },
     "emissionStrength": 4.0,
     "normalStrength": 1,
     "textures": []
@@ -195,55 +461,88 @@
   {
     "name": "GlassNode",
     "skipped": false,
-    "baseColor": { "r": 0.9, "g": 0.95, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 0.9,
+      "g": 0.95,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.05,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_GLASS"],
+    "shaderTypes": [
+      "BSDF_GLASS"
+    ],
     "refractiveIor": 1.45,
     "textures": []
   },
   {
     "name": "GlassGroupIor",
     "skipped": false,
-    "baseColor": { "r": 0.8, "g": 0.9, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 0.8,
+      "g": 0.9,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.0,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_GLASS"],
+    "shaderTypes": [
+      "BSDF_GLASS"
+    ],
     "refractiveIor": 1.33,
     "textures": []
   },
   {
     "name": "RefractionDiamond",
     "skipped": false,
-    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.0,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_REFRACTION"],
+    "shaderTypes": [
+      "BSDF_REFRACTION"
+    ],
     "refractiveIor": 2.4,
     "textures": []
   },
   {
     "name": "RefractionClamped",
     "skipped": false,
-    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.0,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_REFRACTION"],
+    "shaderTypes": [
+      "BSDF_REFRACTION"
+    ],
     "refractiveIor": 9.0,
     "textures": []
   },
   {
     "name": "TransmissionLinkedZero",
     "skipped": false,
-    "baseColor": { "r": 0.5, "g": 0.5, "b": 0.5, "a": 1 },
+    "baseColor": {
+      "r": 0.5,
+      "g": 0.5,
+      "b": 0.5,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
@@ -257,7 +556,12 @@
   {
     "name": "TransmissionLinkedCorrob",
     "skipped": false,
-    "baseColor": { "r": 0.9, "g": 0.9, "b": 0.9, "a": 1 },
+    "baseColor": {
+      "r": 0.9,
+      "g": 0.9,
+      "b": 0.9,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.1,
     "emissionStrength": 0,
@@ -272,7 +576,12 @@
   {
     "name": "RaytraceAlone",
     "skipped": false,
-    "baseColor": { "r": 0.6, "g": 0.6, "b": 0.6, "a": 1 },
+    "baseColor": {
+      "r": 0.6,
+      "g": 0.6,
+      "b": 0.6,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.4,
     "emissionStrength": 0,
@@ -285,7 +594,12 @@
   {
     "name": "AlphaNoise",
     "skipped": false,
-    "baseColor": { "r": 0.3, "g": 0.3, "b": 0.3, "a": 1 },
+    "baseColor": {
+      "r": 0.3,
+      "g": 0.3,
+      "b": 0.3,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
@@ -296,7 +610,12 @@
   {
     "name": "AlphaGhost",
     "skipped": false,
-    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
@@ -307,7 +626,12 @@
   {
     "name": "LinkedAlphaLeaf",
     "skipped": false,
-    "baseColor": { "r": 0.2, "g": 0.6, "b": 0.2, "a": 1 },
+    "baseColor": {
+      "r": 0.2,
+      "g": 0.6,
+      "b": 0.2,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
@@ -319,7 +643,12 @@
   {
     "name": "RaytraceDecal",
     "skipped": false,
-    "baseColor": { "r": 0.5, "g": 0.5, "b": 0.5, "a": 1 },
+    "baseColor": {
+      "r": 0.5,
+      "g": 0.5,
+      "b": 0.5,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
@@ -331,7 +660,12 @@
   {
     "name": "MaskedFacMix",
     "skipped": false,
-    "baseColor": { "r": 0.4, "g": 0.4, "b": 0.4, "a": 1 },
+    "baseColor": {
+      "r": 0.4,
+      "g": 0.4,
+      "b": 0.4,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
@@ -342,23 +676,38 @@
   {
     "name": "LoneTransparent",
     "skipped": false,
-    "baseColor": { "r": 1, "g": 1, "b": 1, "a": 1 },
+    "baseColor": {
+      "r": 1,
+      "g": 1,
+      "b": 1,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_TRANSPARENT"],
+    "shaderTypes": [
+      "BSDF_TRANSPARENT"
+    ],
     "textures": []
   },
   {
     "name": "AddShaderRayTrick",
     "skipped": false,
-    "baseColor": { "r": 0.7, "g": 0.7, "b": 0.7, "a": 1 },
+    "baseColor": {
+      "r": 0.7,
+      "g": 0.7,
+      "b": 0.7,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_PRINCIPLED", "BSDF_TRANSPARENT"],
+    "shaderTypes": [
+      "BSDF_PRINCIPLED",
+      "BSDF_TRANSPARENT"
+    ],
     "surfaceRenderMethod": "DITHERED",
     "useRaytraceRefraction": false,
     "textures": []
@@ -366,25 +715,46 @@
   {
     "name": "AddTransparentBlended",
     "skipped": false,
-    "baseColor": { "r": 0.7, "g": 0.7, "b": 0.7, "a": 1 },
+    "baseColor": {
+      "r": 0.7,
+      "g": 0.7,
+      "b": 0.7,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_PRINCIPLED", "BSDF_TRANSPARENT"],
+    "shaderTypes": [
+      "BSDF_PRINCIPLED",
+      "BSDF_TRANSPARENT"
+    ],
     "surfaceRenderMethod": "BLENDED",
     "textures": []
   },
   {
     "name": "EmissionAddShader",
     "skipped": false,
-    "baseColor": { "r": 0, "g": 0, "b": 0, "a": 1 },
+    "baseColor": {
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
-    "emissionColor": { "r": 1, "g": 0.8, "b": 0.2, "a": 1 },
+    "emissionColor": {
+      "r": 1,
+      "g": 0.8,
+      "b": 0.2,
+      "a": 1
+    },
     "emissionStrength": 5.0,
     "normalStrength": 1,
-    "shaderTypes": ["BSDF_PRINCIPLED", "EMISSION"],
+    "shaderTypes": [
+      "BSDF_PRINCIPLED",
+      "EMISSION"
+    ],
     "textures": []
   },
   {
@@ -397,7 +767,16 @@
     "normalStrength": 1,
     "projectionMapped": true,
     "textures": [
-      { "name": "RockDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/RockDiff.png", "basename": "RockDiff.png", "mapping": null }
+      {
+        "name": "RockDiff",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/RockDiff.png",
+        "basename": "RockDiff.png",
+        "mapping": null
+      }
     ]
   },
   {
@@ -410,7 +789,16 @@
     "normalStrength": 1,
     "consumedByNoUvObject": true,
     "textures": [
-      { "name": "WallDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/WallDiff.png", "basename": "WallDiff.png", "mapping": null }
+      {
+        "name": "WallDiff",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/WallDiff.png",
+        "basename": "WallDiff.png",
+        "mapping": null
+      }
     ]
   },
   {
@@ -422,8 +810,26 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "BaseRock", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/BaseRock.png", "basename": "BaseRock.png", "mapping": null },
-      { "name": "MossOverlay", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/MossOverlay.png", "basename": "MossOverlay.png", "mapping": null }
+      {
+        "name": "BaseRock",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/BaseRock.png",
+        "basename": "BaseRock.png",
+        "mapping": null
+      },
+      {
+        "name": "MossOverlay",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/MossOverlay.png",
+        "basename": "MossOverlay.png",
+        "mapping": null
+      }
     ]
   },
   {
@@ -435,10 +841,48 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "BrickDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/BrickDiff.png", "basename": "BrickDiff.png",
-        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } } },
-      { "name": "BrickDetailNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/BrickDetailNormal.png", "basename": "BrickDetailNormal.png",
-        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 4, "y": 4, "z": 1 } } }
+      {
+        "name": "BrickDiff",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/BrickDiff.png",
+        "basename": "BrickDiff.png",
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        }
+      },
+      {
+        "name": "BrickDetailNormal",
+        "slots": [
+          "Normal"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/BrickDetailNormal.png",
+        "basename": "BrickDetailNormal.png",
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "scale": {
+            "x": 4,
+            "y": 4,
+            "z": 1
+          }
+        }
+      }
     ]
   },
   {
@@ -450,21 +894,68 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "TileDiff", "slots": ["Base Color"], "fileKind": "path", "path": "C:/tex/TileDiff.png", "basename": "TileDiff.png",
-        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 }, "rot": { "x": 0, "y": 0, "z": 45 } } }
+      {
+        "name": "TileDiff",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/TileDiff.png",
+        "basename": "TileDiff.png",
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          "rot": {
+            "x": 0,
+            "y": 0,
+            "z": 45
+          }
+        }
+      }
     ]
   },
   {
     "name": "PackedORM",
     "skipped": false,
-    "baseColor": { "r": 0.8, "g": 0.8, "b": 0.8, "a": 1 },
+    "baseColor": {
+      "r": 0.8,
+      "g": 0.8,
+      "b": 0.8,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "ORM_Metallic", "slots": ["Metallic"], "fileKind": "path", "path": "C:/tex/orm.png", "basename": "orm.png", "mapping": null },
-      { "name": "ORM_Roughness", "slots": ["Roughness"], "fileKind": "path", "path": "C:/tex/orm.png", "basename": "orm.png", "mapping": null }
+      {
+        "name": "ORM_Metallic",
+        "slots": [
+          "Metallic"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/orm.png",
+        "basename": "orm.png",
+        "mapping": null
+      },
+      {
+        "name": "ORM_Roughness",
+        "slots": [
+          "Roughness"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/orm.png",
+        "basename": "orm.png",
+        "mapping": null
+      }
     ]
   },
   {
@@ -476,7 +967,16 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "UdimSheet", "slots": ["Base Color"], "fileKind": "udim", "path": "C:/tex/sheet.<UDIM>.png", "basename": "sheet.<UDIM>.png", "mapping": null }
+      {
+        "name": "UdimSheet",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "udim",
+        "path": "C:/tex/sheet.<UDIM>.png",
+        "basename": "sheet.<UDIM>.png",
+        "mapping": null
+      }
     ]
   },
   {
@@ -487,7 +987,9 @@
     "roughness": 0.5,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "dynamicChannels": ["diffuse"],
+    "dynamicChannels": [
+      "diffuse"
+    ],
     "textures": []
   },
   {
@@ -499,15 +1001,49 @@
     "emissionStrength": 0,
     "normalStrength": 1,
     "textures": [
-      { "name": "Mat_diffuse", "slots": ["Base Color"], "fileKind": "path", "path": "C:/bake/Mat_diffuse.png", "basename": "Mat_diffuse.png", "mapping": null, "baked": true },
-      { "name": "BrickNormal", "slots": ["Normal"], "fileKind": "path", "path": "C:/tex/BrickNormal.png", "basename": "BrickNormal.png",
-        "mapping": { "loc": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 2, "y": 2, "z": 1 } } }
+      {
+        "name": "Mat_diffuse",
+        "slots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/bake/Mat_diffuse.png",
+        "basename": "Mat_diffuse.png",
+        "mapping": null,
+        "baked": true
+      },
+      {
+        "name": "BrickNormal",
+        "slots": [
+          "Normal"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/BrickNormal.png",
+        "basename": "BrickNormal.png",
+        "mapping": {
+          "loc": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "scale": {
+            "x": 2,
+            "y": 2,
+            "z": 1
+          }
+        }
+      }
     ]
   },
   {
     "name": "FlipGreenOff",
     "skipped": false,
-    "baseColor": { "r": 0.5, "g": 0.5, "b": 0.5, "a": 1 },
+    "baseColor": {
+      "r": 0.5,
+      "g": 0.5,
+      "b": 0.5,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
@@ -518,12 +1054,66 @@
   {
     "name": "LossyAniso",
     "skipped": false,
-    "baseColor": { "r": 0.5, "g": 0.5, "b": 0.5, "a": 1 },
+    "baseColor": {
+      "r": 0.5,
+      "g": 0.5,
+      "b": 0.5,
+      "a": 1
+    },
     "metallic": 0,
     "roughness": 0.5,
     "emissionStrength": 0,
     "normalStrength": 1,
-    "lossyFeatures": ["anisotropy", "coat"],
+    "lossyFeatures": [
+      "anisotropy",
+      "coat"
+    ],
     "textures": []
+  },
+  {
+    "name": "DirectDiffuse",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      {
+        "name": "Albedo",
+        "slots": [
+          "Base Color"
+        ],
+        "directSlots": [
+          "Base Color"
+        ],
+        "fileKind": "path",
+        "path": "C:/tex/Albedo.png",
+        "basename": "Albedo.png",
+        "mapping": null
+      }
+    ]
+  },
+  {
+    "name": "TransformedDiffuse",
+    "skipped": false,
+    "baseColor": null,
+    "metallic": 0,
+    "roughness": 0.5,
+    "emissionStrength": 0,
+    "normalStrength": 1,
+    "textures": [
+      {
+        "name": "GrungeMask",
+        "slots": [
+          "Base Color"
+        ],
+        "directSlots": [],
+        "fileKind": "path",
+        "path": "C:/tex/GrungeMask.png",
+        "basename": "GrungeMask.png",
+        "mapping": null
+      }
+    ]
   }
 ]

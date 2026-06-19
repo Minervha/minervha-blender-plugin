@@ -346,6 +346,10 @@ def _popup_report(context, report):
             layout.label(text="Skipped (no node tree): %d" % len(report['skipped']))
         if report.get('materialsUnused'):
             layout.label(text="Ignored (unused — no face): %d" % len(report['materialsUnused']))
+        if report.get('needsBake'):
+            n_ch = sum(len(x.get('channels') or []) for x in report['needsBake'])
+            layout.label(text="Channels left empty (enable Bake): %d in %d material(s)" % (
+                n_ch, len(report['needsBake'])), icon='INFO')
         # Scene-mode counters (present only for a scene export).
         if 'objectsExported' in report:
             layout.separator()

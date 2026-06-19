@@ -85,6 +85,64 @@ def trace_from_texture(texture_node, node_tree, parent_map):
     return sorted(found_slots)
 
 
+# Intermediate node types that DON'T change a texture's role as a channel's data — the texture
+# remains the channel's map "through" them. Anything else between a texture and a Principled slot
+# (Mix / Math / ColorRamp / Hue-Sat / Invert / procedural ...) TRANSFORMS the texture, so the texture
+# is a procedural *input*, not the final map. Groups are structural (handled explicitly below).
+_TRANSPARENT_PASS = {"REROUTE", "NORMAL_MAP",
+                     "SEPARATE_COLOR", "SEPARATE_RGB", "SEPARATE_XYZ"}
+
+
+def direct_slots_from_texture(texture_node, node_tree, parent_map):
+    """Subset of `trace_from_texture` reachable through ONLY transparent intermediate nodes — i.e. the
+    slots for which this texture IS the channel's data (direct map), not a procedural input feeding it.
+
+    Same forward walk as trace_from_texture, but each stack item carries a `transformed` flag set once
+    the path crosses a non-whitelisted node; a Principled slot reached while transformed is dropped.
+    Used by the mapper to ship only final textures (a slot reached only through a node graph is baked
+    or left empty, never shipped as a misleading raw texture)."""
+    found = set()
+    stack = [(out, node_tree, False) for out in texture_node.outputs]
+    visited = set()
+    while stack:
+        socket, tree, transformed = stack.pop()
+        key = (id(tree), id(socket), transformed)
+        if key in visited:
+            continue
+        visited.add(key)
+        for link in socket.links:
+            tn, ts = link.to_node, link.to_socket
+            if tn.type == 'BSDF_PRINCIPLED':
+                if not transformed:
+                    found.add(ts.name)
+                continue
+            if (tn.type in ('BUMP', 'DISPLACEMENT') and ts.name == 'Height') or \
+               (tn.type == 'OUTPUT_MATERIAL' and ts.name == 'Displacement'):
+                if not transformed:
+                    found.add('Height')
+                continue
+            if tn.type == 'GROUP':                       # structural — preserve `transformed`
+                gt = tn.node_tree
+                if gt:
+                    idx = next((i for i, inp in enumerate(tn.inputs) if inp == ts), None)
+                    if idx is not None:
+                        for gi in gt.nodes:
+                            if gi.type == 'GROUP_INPUT' and idx < len(gi.outputs):
+                                stack.append((gi.outputs[idx], gt, transformed))
+                continue
+            if tn.type == 'GROUP_OUTPUT':                # structural — preserve `transformed`
+                idx = next((i for i, inp in enumerate(tn.inputs) if inp == ts), None)
+                if idx is not None:
+                    for pn, pt in parent_map.get(tree, []):
+                        if idx < len(pn.outputs):
+                            stack.append((pn.outputs[idx], pt, transformed))
+                continue
+            nxt = transformed or (tn.type not in _TRANSPARENT_PASS)
+            for out in tn.outputs:
+                stack.append((out, tree, nxt))
+    return sorted(found)
+
+
 def images_feeding_input(start_socket, node_tree, parent_map):
     """Backward-trace an input socket to the set of distinct Image datablock names feeding it
     (through Mix / Math / Separate / Combine / Reroute / node groups). Detects a channel built from a

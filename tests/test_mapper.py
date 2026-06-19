@@ -40,15 +40,20 @@ def approx_equal(a, b, tol=1e-9):
 _SEMANTIC = {
     "TriplanarProjection":   {"triplanar": True},
     "TriplanarNoUV":         {"triplanar": True, "note_sub": "without UVs"},
-    "MultiTexBaseColor":     {"triplanar": False, "bake": [("diffuse", "multi-texture")]},
+    "MultiTexBaseColor":     {"triplanar": False, "bake": [("diffuse", "multi-texture")],
+                              "needs_bake": ["diffuse"]},
     "DivergentNormalTiling": {"bake": [("normal", "divergent-uv")]},
     "RotatedMapping":        {"bake": [("diffuse", "rotation")]},
     "PackedORM":             {"bake": [("roughness", "orm-packed")]},
     "UdimDiffuse":           {"bake": [("diffuse", "udim")]},
-    "ProceduralDiffuse":     {"bake": [("diffuse", "procedural")]},
+    "ProceduralDiffuse":     {"bake": [("diffuse", "procedural")], "needs_bake": ["diffuse"]},
     "BakedDiffuse":          {"tiling_identity": True},
     "FlipGreenOff":          {"flip_green": False},
     "LossyAniso":            {"note_sub": "anisotropy"},
+    # chunk-03: only DIRECT textures ship; a slot reached through a transforming node graph is left
+    # to baking (Bake off -> empty + reported), never shipped as a wrong guess.
+    "TransformedDiffuse":    {"needs_bake": ["diffuse"], "note_sub": "node graph"},
+    "DirectDiffuse":         {"needs_bake_not": ["diffuse"]},
 }
 
 
@@ -73,6 +78,12 @@ def run_semantic():
         for ch, reason in checks.get("bake", []):
             if {"channel": ch, "reason": reason} not in report["bakeCandidates"]:
                 fails.append((name, f"missing bakeCandidate ({ch},{reason}); have {report['bakeCandidates']}"))
+        for ch in checks.get("needs_bake", []):
+            if ch not in report.get("needsBake", []):
+                fails.append((name, f"expected '{ch}' in needsBake; have {report.get('needsBake')}"))
+        for ch in checks.get("needs_bake_not", []):
+            if ch in report.get("needsBake", []):
+                fails.append((name, f"'{ch}' should NOT be in needsBake; have {report.get('needsBake')}"))
         sub = checks.get("note_sub")
         if sub and not any(sub in n for n in report["notes"]):
             fails.append((name, f"missing note ~ '{sub}'; have {report['notes']}"))
