@@ -77,8 +77,32 @@ picks JPG/PNG from the user's `tex_opts` and `wlsave_export._process_textures` *
 source texture, rounded to a power of two, capped by the Bake-resolution dropdown — **now a ceiling** —, floor
 512, procedural-only 1024). Live on `Scene_ResortMadness`: `concreteceiling001a` (512² sources) **6.0 MB
 PNG@2048 → 114 KB JPEG@512**; **1100/1146** materials bake below the old fixed 2048². Commit `506d970`. Plan:
-[`../docs/plans/features/export-optimizations/plan.md`](../docs/plans/features/export-optimizations/plan.md)
-(chunks 02 unused-materials / 03 final-textures-only / 04 report+docs pending).
+[`../docs/plans/features/export-optimizations/plan.md`](../docs/plans/features/export-optimizations/plan.md).
+
+**Export optimizations — chunk-02 (unused materials, validated live Blender 5.1.2).** A material sitting in a
+slot but used by **no polygon** — and, in Whole-File scope, an **orphan** (0 users) — was still exported and
+dragged its textures into the bundle. `introspect._materials_for_scope` now keeps only face-used materials:
+usage is read from the **unmodified base mesh**'s `material_index` in bulk (`_used_indices`, `foreach_get`) —
+exact for an unmodified mesh (= what `wm.obj_export` writes) and fast (1.16 s over a 15k-object / 1166-material
+scene; a depsgraph-eval pass timed out). **Modified** meshes (Geometry Nodes / Solidify / Boolean may add or
+shift materials) and **non-mesh** objects keep ALL their slot materials, so the filter never false-drops a used
+one. Scene mode stays safe (`material_slots` order untouched, a dropped slot's `CustomMaterial{i}` resolves to
+`""`). `ui` reports `materialsUnused`. Live: 193/1166 dropped. Commit `ed42f4c`.
+
+**Export optimizations — chunk-03 (only direct textures ship, validated live Blender 5.1.2).** A texture that
+reaches a Principled slot only through a **transforming node** (Mix / Math / ColorRamp / ...) is a procedural
+*input*, not the channel's map — but the forward trace attributed it to that channel, so the first-wins pick
+could ship a wrong texture (a noise mask as the albedo). `bsdf_trace.direct_slots_from_texture` returns the slots
+reachable through **transparent nodes only** (Reroute / Normal Map / Separate* / group structure); `introspect`
+threads `tex["directSlots"]`; `mapper` fills a channel only from a **direct (or baked)** texture and **drops the
+guess** on a multi-texture / procedural channel that was not baked, recording it in `report["needsBake"]` (Bake
+off → empty + reported, never a wrong texture); orm-packed / divergent-uv / rotation keep their valid primary.
+`wlsave._process_textures` skips textures with no direct channel slot (no wasted re-encode). `mapper` stays pure
+(directSlots absent → all slots direct, golden unchanged but for `MultiTexBaseColor`); 2 fixtures added, golden
+regenerated, GOLDEN+SEMANTIC (13)+66 green. Live: a Mix-blended albedo is correctly marked transformed. Commit
+`51f82f0`.
+
+**Missing-texture detail.** `wlsave_export._build_material_entries` emits `report["missingDetail"]` — per
 
 **Missing-texture detail.** `wlsave_export._build_material_entries` emits `report["missingDetail"]` — per
 texture (grouped), the **material(s) + consumer mesh(es) + channel(s) + reason** (`packed`/`generated`/`udim`/
