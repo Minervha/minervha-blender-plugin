@@ -4,10 +4,13 @@ Net-new, bpy-side. The ONLY module that renders. It bakes the channels mapper.py
 `report["bakeCandidates"]` (procedural / multi-texture / divergent-UV / packed) into flat PNGs
 the WL `customMaterial` can hold — the rung **B** of the graceful-degradation ladder.
 
-Non-destructive by contract: every bake snapshots render state, adds ONLY throwaway datablocks
-(a target Image + an Image Texture node, a temporary Emission rewire), and restores everything
-in a ``finally``. `mapper.py`/`introspect.py` stay pure — this module is invoked from the
-bpy-side export pipeline (`wlsave_export`) and hands back on-disk PNG paths.
+Bakes on a throwaway full-UV placeholder plane, NEVER a scene mesh: the flattened output is captured
+over the whole [0,1]² UV domain, so ONE texture is correct for every mesh that shares the material
+(each samples it through its own UVs — a scene mesh would only fill its own islands, blacking out the
+rest of an atlas). Non-destructive by contract: every bake snapshots render state, adds ONLY throwaway
+datablocks (the placeholder plane + mesh, a target Image + an Image Texture node, a temporary Emission
+rewire), and restores everything in a ``finally``. `mapper.py`/`introspect.py` stay pure — this module
+is invoked from the bpy-side export pipeline (`wlsave_export`) and hands back on-disk PNG paths.
 
 Validated live on Blender 5.1.2 (see docs/plans/features/shading-compatibility/chunk-07):
   - EEVEE cannot bake -> swap to CYCLES and restore the literal engine string.
@@ -116,67 +119,57 @@ def _active_output(mat):
     return outs[0]
 
 
-def _force_render_enabled(obj):
-    """Temporarily clear render-disable on `obj` and every ancestor collection so it can be baked.
+@contextmanager
+def placeholder_plane(mat):
+    """Yield a throwaway unit plane whose UV map fills the WHOLE [0,1]² tile, carrying only `mat`.
 
-    `bpy.ops.object.bake()` refuses an object that is not enabled for rendering, and a collection's
-    `hide_render` (the camera icon) propagates to ALL its descendants — so an object whose own
-    `hide_render` is False can still be render-disabled purely because an ancestor collection is.
-    Snapshots only the flags it actually clears and returns an idempotent restore() (the module's
-    non-destructive contract); a view-layer update recomputes the base render-enable flags so the
-    bake op sees the change."""
-    snap = []
-    if obj.hide_render:
-        snap.append((obj, True))
-        obj.hide_render = False
-    # Collections have no `.parent`; build a child -> parent index to walk ancestors.
-    parent = {}
-    def _index(coll):
-        for ch in coll.children:
-            parent[ch.name] = coll
-            _index(ch)
-    _index(bpy.context.scene.collection)
-    seen = set()
-    for c in obj.users_collection:
-        cur = c
-        while cur is not None and cur.name not in seen:
-            seen.add(cur.name)
-            if getattr(cur, "hide_render", False):
-                snap.append((cur, True))
-                cur.hide_render = False
-            cur = parent.get(cur.name)
-    if snap:
+    Baking the material here captures its flattened output over the ENTIRE UV domain — not one scene
+    mesh's islands — so a single texture is correct for every mesh that shares the material (each
+    samples it through its own UVs). The plane lives in the scene master collection (always
+    render-enabled, never excluded) and is fully removed (object + mesh) on exit. Because we never
+    bake a scene mesh, render-disabled objects/collections are a non-issue."""
+    scene = bpy.context.scene
+    mesh = bpy.data.meshes.new("_wl_bake_plane")
+    mesh.from_pydata([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)],
+                     [], [(0, 1, 2, 3)])
+    mesh.update()
+    uv = mesh.uv_layers.new(name="UVMap")
+    for loop_idx, co in enumerate([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]):
+        uv.data[loop_idx].uv = co
+    mesh.materials.append(mat)
+    obj = bpy.data.objects.new("_wl_bake_plane", mesh)
+    obj.hide_render = False
+    scene.collection.objects.link(obj)
+    try:
         bpy.context.view_layer.update()
+        yield obj
+    finally:
+        try:
+            scene.collection.objects.unlink(obj)
+        except Exception:
+            pass
+        if obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh.name in bpy.data.meshes and mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
 
-    def restore():
-        for datablock, val in snap:
-            try:
-                datablock.hide_render = val
-            except Exception:
-                pass
-        if snap:
-            bpy.context.view_layer.update()
-    return restore
 
-
-def _bake_into(obj, mat, img, bake_type, **kw):
-    """Add a target Image Texture node bound to `img`, make it the active/selected node and the
-    object the active/selected object, bake, then remove the node. Caller owns image teardown."""
+def _bake_into(plane, mat, img, bake_type, **kw):
+    """Add a target Image Texture node bound to `img`, make it the active/selected node and `plane`
+    the active/selected object, bake, then remove the node. Caller owns image + plane teardown."""
     nt = mat.node_tree
     node = nt.nodes.new("ShaderNodeTexImage")
     node.image = img
-    render_restore = _force_render_enabled(obj)        # bake refuses render-disabled objects/collections
     try:
         for n in nt.nodes:
             n.select = False
         node.select = True
         nt.nodes.active = node
         bpy.ops.object.select_all(action="DESELECT")
-        obj.select_set(True)
-        bpy.context.view_layer.objects.active = obj
+        plane.select_set(True)
+        bpy.context.view_layer.objects.active = plane
         bpy.ops.object.bake(type=bake_type, **kw)
     finally:
-        render_restore()
         nt.nodes.remove(node)
 
 
@@ -206,10 +199,11 @@ def _emit_rewire(mat, input_name):
     return restore
 
 
-def bake_channel(obj, mat, channel, resolution, out_path):
-    """Bake one WL channel of `mat` on `obj` to a PNG at `out_path`; return the path, or None if
-    the channel is not bakeable here (constant input / unknown channel / no UV). Must run inside
-    `bake_environment()`. `obj` must have a UV map (call `ensure_uv` first)."""
+def bake_channel(mat, channel, resolution, out_path):
+    """Bake one WL channel of `mat` to a PNG at `out_path` on a throwaway full-UV placeholder plane
+    (NEVER a scene mesh); return the path, or None if the channel is not bakeable here (constant
+    input / unknown channel). Must run inside `bake_environment()`. One bake per material -> one
+    shared texture, correct for every mesh that uses it."""
     spec = _CHANNEL_BAKE.get(channel)
     if spec is None:
         return None
@@ -229,7 +223,8 @@ def bake_channel(obj, mat, channel, resolution, out_path):
         elif bake_type == "NORMAL":
             kw["normal_space"] = "TANGENT"
 
-        _bake_into(obj, mat, img, bake_type, **kw)
+        with placeholder_plane(mat) as plane:
+            _bake_into(plane, mat, img, bake_type, **kw)
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         img.filepath_raw = out_path

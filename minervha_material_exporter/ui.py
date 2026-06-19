@@ -78,21 +78,12 @@ def _make_material_baker(objs, tex_dir, resolution):
     """Build the Scene-mode bake pre-pass passed to wlsave_export.build_scene_wlsave.
 
     Bakes the channels mapper flagged as `bakeCandidates` (procedural / multi-texture /
-    divergent-UV) onto a representative in-scope mesh that uses the material, writing PNGs into
+    divergent-UV) on a throwaway full-UV placeholder plane (NEVER a scene mesh), writing PNGs into
     `tex_dir` and injecting them into `norms` as baked path textures (so the rest of the pipeline
     treats them as ordinary on-disk textures and the mapper resets tiling to identity).
 
-    Non-destructive: only objects that ALREADY have a UV map are baked (a UV-space bake on a no-UV
-    mesh is meaningless, and auto-unwrapping would mutate the user's mesh) — no-UV materials are
-    left to the Phase-1 warns. One CYCLES swap for the whole batch, restored on exit."""
-    mat_obj = {}
-    for o in objs:
-        if getattr(o, "type", None) != 'MESH' or not o.data.uv_layers:
-            continue
-        for slot in o.material_slots:
-            if slot.material and slot.material.name not in mat_obj:
-                mat_obj[slot.material.name] = o
-
+    One bake per material -> one shared texture, correct for every mesh that uses it (each samples it
+    through its own UVs). One CYCLES swap for the whole batch, restored on exit."""
     def baker(norms):
         baked = []
         todo = []
@@ -108,17 +99,16 @@ def _make_material_baker(objs, tex_dir, resolution):
                 if ch in _BAKE_CH_SLOT and ch not in chans:
                     chans.append(ch)
             mat = bpy.data.materials.get(norm.get("name"))
-            obj = mat_obj.get(norm.get("name"))   # a UV-bearing consumer of this material
-            if chans and mat is not None and obj is not None:
-                todo.append((norm, mat, obj, chans))
+            if chans and mat is not None:
+                todo.append((norm, mat, chans))
         if not todo or not bake.can_bake():
             return baked
         with bake.bake_environment():
-            for norm, mat, obj, chans in todo:
+            for norm, mat, chans in todo:
                 for ch in chans:
                     safe = wlsave_export._sanitize_name(mat.name, "mat")
                     out = os.path.join(tex_dir, "%s_%s.png" % (safe, ch))
-                    path = bake.bake_channel(obj, mat, ch, resolution, out)
+                    path = bake.bake_channel(mat, ch, resolution, out)
                     if not path:
                         continue
                     slot = _BAKE_CH_SLOT[ch]
