@@ -342,13 +342,53 @@ def _per_mesh_dependency(mat):
     return sorted(reasons)
 
 
-def _materials_for_scope(scope, objects):
-    """Resolve the ordered, de-duplicated material list for a scope.
+def _used_indices(mesh):
+    """Set of material-slot indices referenced by `mesh`'s faces, read in bulk via foreach_get
+    (a C-level copy) — orders of magnitude faster than a per-polygon Python loop, which matters on
+    scenes with millions of faces."""
+    n = len(mesh.polygons)
+    if not n:
+        return set()
+    buf = [0] * n
+    mesh.polygons.foreach_get("material_index", buf)
+    return set(buf)
 
-    scope='FILE'       -> every material in the file (like the original script).
-    scope='SELECTED'   -> materials on the selected objects (or `objects` if given).
-    scope='COLLECTION' -> materials on `objects` (the chosen collection's objects).
-    """
+
+def _used_materials(objects):
+    """Set of material datablocks actually assigned to >=1 face in `objects`.
+
+    For an UNMODIFIED mesh the base-mesh `material_index` is exactly what export writes (no modifier
+    to add or shift materials), so read it in bulk and drop slots no face uses. Non-mesh objects
+    (curves/text — no polygons) and MODIFIED meshes (a Geometry-Nodes / Solidify / Boolean modifier
+    may introduce or shift materials we can't cheaply predict) keep ALL their slot materials.
+
+    Biased to KEEP on any uncertainty: a false drop breaks the export, a false keep is just the old
+    behavior. Deliberately avoids depsgraph evaluation — prohibitively slow on large scenes (15k+
+    objects) and the export's own bottleneck would dwarf any gain."""
+    used = set()
+    for obj in objects:
+        slots = getattr(obj, "material_slots", None)
+        if not slots:
+            continue
+        if getattr(obj, "type", None) != "MESH" or len(getattr(obj, "modifiers", ())) > 0:
+            for s in slots:                 # no faces to read, or modifier-driven -> keep every slot
+                if s.material is not None:
+                    used.add(s.material)
+            continue
+        try:
+            idxs = _used_indices(obj.data)  # unmodified base mesh = exactly what export writes
+        except Exception:
+            idxs = set(range(len(slots)))   # unreadable -> keep all
+        n = len(slots)
+        for i in idxs:
+            if 0 <= i < n and slots[i].material is not None:
+                used.add(slots[i].material)
+    return used
+
+
+def _slot_materials(scope, objects):
+    """Ordered, de-duplicated list of ALL slot materials in scope (pre-filter). FILE = every
+    material in the .blend; else the materials on `objects`' slots (selection if None)."""
     if scope == "FILE":
         return list(bpy.data.materials)
     if objects is None:
@@ -361,6 +401,37 @@ def _materials_for_scope(scope, objects):
                 seen.add(m.name)
                 out.append(m)
     return out
+
+
+def _materials_for_scope(scope, objects):
+    """Resolve the ordered, de-duplicated material list for a scope, dropping materials that are
+    NOT assigned to any face (a slot with no polygon) and — in FILE scope — orphans (0 users).
+
+    scope='FILE'       -> every material used on a face anywhere in the .blend (orphans dropped).
+    scope='SELECTED'   -> face-used materials on the selected objects (or `objects` if given).
+    scope='COLLECTION' -> face-used materials on `objects` (the chosen collection's objects).
+    """
+    if scope == "FILE":
+        used = _used_materials(bpy.data.objects)
+        return [m for m in bpy.data.materials if m in used]
+    if objects is None:
+        objects = bpy.context.selected_objects if scope == "SELECTED" else []
+    used = _used_materials(objects)
+    seen, out = set(), []
+    for obj in objects:
+        for slot in getattr(obj, "material_slots", []):
+            m = slot.material
+            if m is not None and m in used and m.name not in seen:
+                seen.add(m.name)
+                out.append(m)
+    return out
+
+
+def unused_materials(scope, objects):
+    """Names of in-scope materials dropped as unused (slot-but-no-face, or orphan in FILE scope) —
+    for the export report. = all slot materials in scope minus the face-used ones kept."""
+    kept = {m.name for m in _materials_for_scope(scope, objects)}
+    return [m.name for m in _slot_materials(scope, objects) if m.name not in kept]
 
 
 def _annotate_no_uv(norms, mats, scope, objects):

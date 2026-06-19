@@ -246,6 +246,8 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             return {'CANCELLED'}
         _annotate_flip(context, norms)
         report = wlsave_export.build_wlsave(norms, name, self.filepath, tex_opts=self._tex_opts(context))
+        report["materialsUnused"] = introspect.unused_materials(
+            context.scene.minervha_scope, _objects_for_scope(context))
         self.report({'INFO'}, "Built %s — %d materials, %d textures (%d missing)" % (
             self.filepath, len(report['created']),
             len(report['texturesCopied']) + len(report['texturesReExported']),
@@ -288,6 +290,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         finally:
             if bake_tmp:
                 shutil.rmtree(bake_tmp, ignore_errors=True)
+        report["materialsUnused"] = introspect.unused_materials('COLLECTION', objs)
         baked_n = len(report.get('materialsBaked') or [])
         approx_n = len(report.get('materialsApproximated') or [])
         self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV, %d baked, %d approx)" % (
@@ -341,6 +344,8 @@ def _popup_report(context, report):
             layout.label(text="Renamed (sanitized/clash): %d" % len(report['renamed']))
         if report['skipped']:
             layout.label(text="Skipped (no node tree): %d" % len(report['skipped']))
+        if report.get('materialsUnused'):
+            layout.label(text="Ignored (unused — no face): %d" % len(report['materialsUnused']))
         # Scene-mode counters (present only for a scene export).
         if 'objectsExported' in report:
             layout.separator()
