@@ -116,12 +116,56 @@ def _active_output(mat):
     return outs[0]
 
 
+def _force_render_enabled(obj):
+    """Temporarily clear render-disable on `obj` and every ancestor collection so it can be baked.
+
+    `bpy.ops.object.bake()` refuses an object that is not enabled for rendering, and a collection's
+    `hide_render` (the camera icon) propagates to ALL its descendants — so an object whose own
+    `hide_render` is False can still be render-disabled purely because an ancestor collection is.
+    Snapshots only the flags it actually clears and returns an idempotent restore() (the module's
+    non-destructive contract); a view-layer update recomputes the base render-enable flags so the
+    bake op sees the change."""
+    snap = []
+    if obj.hide_render:
+        snap.append((obj, True))
+        obj.hide_render = False
+    # Collections have no `.parent`; build a child -> parent index to walk ancestors.
+    parent = {}
+    def _index(coll):
+        for ch in coll.children:
+            parent[ch.name] = coll
+            _index(ch)
+    _index(bpy.context.scene.collection)
+    seen = set()
+    for c in obj.users_collection:
+        cur = c
+        while cur is not None and cur.name not in seen:
+            seen.add(cur.name)
+            if getattr(cur, "hide_render", False):
+                snap.append((cur, True))
+                cur.hide_render = False
+            cur = parent.get(cur.name)
+    if snap:
+        bpy.context.view_layer.update()
+
+    def restore():
+        for datablock, val in snap:
+            try:
+                datablock.hide_render = val
+            except Exception:
+                pass
+        if snap:
+            bpy.context.view_layer.update()
+    return restore
+
+
 def _bake_into(obj, mat, img, bake_type, **kw):
     """Add a target Image Texture node bound to `img`, make it the active/selected node and the
     object the active/selected object, bake, then remove the node. Caller owns image teardown."""
     nt = mat.node_tree
     node = nt.nodes.new("ShaderNodeTexImage")
     node.image = img
+    render_restore = _force_render_enabled(obj)        # bake refuses render-disabled objects/collections
     try:
         for n in nt.nodes:
             n.select = False
@@ -132,6 +176,7 @@ def _bake_into(obj, mat, img, bake_type, **kw):
         bpy.context.view_layer.objects.active = obj
         bpy.ops.object.bake(type=bake_type, **kw)
     finally:
+        render_restore()
         nt.nodes.remove(node)
 
 
