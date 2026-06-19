@@ -9,6 +9,7 @@ and hierarchy (Group props). Opens a file-save dialog, then shows a report.
 import os
 import shutil
 import tempfile
+import time
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
@@ -24,6 +25,78 @@ except ImportError:                           # dev / sys.path import (live MCP)
 # must be multiplied by 100 to import at the right size (calibration #2). One world scale drives
 # BOTH the OBJ geometry (global_scale) and the prop positions (position_scale).
 WL_UNITS_PER_METRE = 100.0
+
+
+# Human labels for the build generator's progress phases (shown in the status bar during export).
+_PHASE_LABEL = {"bake": "Baking", "textures": "Textures", "map": "Mapping",
+                "read": "Reading textures", "meshes": "Meshes", "props": "Placing", "zip": "Writing"}
+
+
+# The single last-export log: kept in memory for the panel and mirrored to one overwritten file
+# (only the latest export is retained, per request). Loaded from disk on register so it survives a
+# Blender restart.
+_LAST_LOG_TEXT = ""
+_LAST_LOG_PATH = ""
+_LOG_PANEL_MAX_LINES = 30
+
+
+def _log_file_path():
+    """Fixed path of the single last-export log under the extension's user dir, or None.
+    `extension_path_user` only works for an installed extension (4.2+); dev imports get None
+    (the in-memory log still shows in the panel)."""
+    try:
+        d = bpy.utils.extension_path_user(__package__, path="", create=True)
+        return os.path.join(d, "last_export.log")
+    except Exception:
+        return None
+
+
+def _write_last_log(text):
+    """Store the last-export log in memory (for the panel) and overwrite the single log file."""
+    global _LAST_LOG_TEXT, _LAST_LOG_PATH
+    _LAST_LOG_TEXT = text
+    p = _log_file_path()
+    if not p:
+        return
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(text)
+        _LAST_LOG_PATH = p
+    except Exception:
+        _LAST_LOG_PATH = ""
+
+
+def _load_last_log():
+    """On register, load the persisted last-export log so the panel shows it after a restart."""
+    global _LAST_LOG_TEXT, _LAST_LOG_PATH
+    p = _log_file_path()
+    if p and os.path.isfile(p):
+        try:
+            with open(p, encoding="utf-8") as f:
+                _LAST_LOG_TEXT = f.read()
+            _LAST_LOG_PATH = p
+        except Exception:
+            pass
+
+
+def _scope_label(context):
+    sc = context.scene.minervha_scope
+    return {'SELECTED': "Selected objects", 'COLLECTION': "Collection", 'FILE': "Whole file"}.get(sc, sc)
+
+
+def _options_label(context):
+    """One-line human summary of the export options, for the log header."""
+    s = context.scene
+    mr = s.minervha_tex_max_res
+    parts = ["JPG q%d" % s.minervha_tex_jpg_quality if s.minervha_tex_prefer_jpg else "PNG",
+             "max %s" % ("none" if mr == 'NONE' else mr + "px"),
+             "flipGreen " + ("on" if s.minervha_flip_green else "off")]
+    if s.minervha_export_mode == 'SCENE':
+        parts += ["bake " + ("on" if s.minervha_bake else "off"),
+                  "master group " + ("on" if s.minervha_master_group else "off"),
+                  "collisions " + ("on" if s.minervha_enable_collision else "off")]
+    parts.append("thumbnail " + ("yes" if _thumbnail_path(context) else "no"))
+    return ", ".join(parts)
 
 
 SCOPE_ITEMS = [
@@ -133,6 +206,9 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
     fmt, ext = ("JPEG", ".jpg") if prefer_jpg else ("PNG", ".png")
 
     def baker(norms):
+        """Generator: yields ("bake", i, total) per material baked, returns the baked[] list.
+        build_scene_wlsave's generator `yield from`s this so the (slow) Cycles bake is stepped
+        and the modal export stays responsive during baking."""
         baked = []
         todo = []
         for norm in norms:
@@ -152,7 +228,8 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
         if not todo or not bake.can_bake():
             return baked
         with bake.bake_environment():
-            for norm, mat, chans in todo:
+            for i, (norm, mat, chans) in enumerate(todo, 1):
+                yield ("bake", i, len(todo))
                 res = _adaptive_bake_res(mat, ceiling, max_res)
                 for ch in chans:
                     safe = wlsave_export._sanitize_name(mat.name, "mat")
@@ -233,10 +310,29 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
+        """Set up the export (brief, synchronous) then run the heavy build MODALLY: a timer steps
+        the build generator a chunk at a time so Blender redraws between chunks (no "Not Responding")
+        and a progress bar advances; Esc cancels cleanly. Returns RUNNING_MODAL on success."""
         name = (context.scene.minervha_wlsave_name or "").strip()
-        if context.scene.minervha_export_mode == 'SCENE':
-            return self._execute_scene(context, name)
-        return self._execute_materials(context, name)
+        self._reset_state()
+        prep = (self._prepare_scene if context.scene.minervha_export_mode == 'SCENE'
+                else self._prepare_materials)(context, name)
+        if prep is not None:
+            return prep                       # {'CANCELLED'} — a warning was already reported
+        return self._start_modal(context)
+
+    def _reset_state(self):
+        self._t_start = time.monotonic()
+        self._gen = None
+        self._mode = None
+        self._level = ""
+        self._bake_tmp = None
+        self._timer = None
+        self._report = None
+        self._unused = []
+        self._phase, self._done, self._total = "", 0, 1
+        self._phase_order = []        # phases in first-seen order
+        self._phase_start = {}        # phase -> elapsed seconds when first seen (for the log timeline)
 
     def _tex_opts(self, context):
         """Texture pre-pass options from the scene props (see wlsave_export._process_textures)."""
@@ -248,24 +344,25 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             "max_res": None if mr == 'NONE' else int(mr),
         }
 
-    def _execute_materials(self, context, name):
+    def _prepare_materials(self, context, name):
+        """Synchronous setup for a materials-only export; builds the step generator. Returns
+        {'CANCELLED'} (with a warning) or None when prepared."""
         norms = introspect.collect(context.scene.minervha_scope, _objects_for_scope(context))
         if not norms:
             self.report({'WARNING'}, "No materials in the selected scope")
             return {'CANCELLED'}
         _annotate_flip(context, norms)
-        report = wlsave_export.build_wlsave(norms, name, self.filepath, tex_opts=self._tex_opts(context),
-                                            thumbnail=_thumbnail_path(context))
-        report["materialsUnused"] = introspect.unused_materials(
+        self._mode = 'materials'
+        self._gen = wlsave_export._iter_build_wlsave(
+            norms, name, self.filepath, tex_opts=self._tex_opts(context),
+            thumbnail=_thumbnail_path(context))
+        self._unused = introspect.unused_materials(
             context.scene.minervha_scope, _objects_for_scope(context))
-        self.report({'INFO'}, "Built %s — %d materials, %d textures (%d missing)" % (
-            self.filepath, len(report['created']),
-            len(report['texturesCopied']) + len(report['texturesReExported']),
-            len(report['texturesMissing'])))
-        self._popup(context, report)
-        return {'FINISHED'}
+        return None
 
-    def _execute_scene(self, context, name):
+    def _prepare_scene(self, context, name):
+        """Synchronous setup for a scene export; builds the step generator. Returns
+        {'CANCELLED'} (with a warning) or None when prepared."""
         objs = _scene_objects(context)
         if not objs:
             self.report({'WARNING'}, "No objects in the selected scope")
@@ -281,37 +378,167 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         level = "" if target == 'COLLECTION' else target
         # World scale = 100 x scene Unit Scale (Blender metres -> WL centimetres), applied UNIFORMLY
         # to geometry (obj global_scale) and prop positions — one scene-wide scale, not per-object.
-        # At the default Unit Scale (1.0) this is x100; a cm-modelled scene (Unit Scale 0.01) -> x1.
         unit = context.scene.unit_settings.scale_length or 1.0
         world_scale = WL_UNITS_PER_METRE * unit
         exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(objs),
                                                 global_scale=world_scale)
-        # Scene-mode bake pre-pass (opt-in): flatten flagged channels onto a UV-bearing consumer mesh.
-        bake_tmp, baker = None, None
+        # Scene-mode bake pre-pass (opt-in): the baker is a generator factory, stepped by the build.
+        baker = None
         if context.scene.minervha_bake:
-            bake_tmp = tempfile.mkdtemp(prefix="wlsave_bake_")
-            baker = _make_material_baker(bake_tmp, int(context.scene.minervha_bake_res),
+            self._bake_tmp = tempfile.mkdtemp(prefix="wlsave_bake_")
+            baker = _make_material_baker(self._bake_tmp, int(context.scene.minervha_bake_res),
                                          self._tex_opts(context))
+        self._mode = 'scene'
+        self._level = level
+        self._gen = wlsave_export._iter_build_scene_wlsave(
+            norms, norm_objects, name, self.filepath, exporter,
+            position_scale=world_scale, level=level, tex_opts=self._tex_opts(context),
+            material_baker=baker, thumbnail=_thumbnail_path(context),
+            master_group=bool(context.scene.minervha_master_group),
+            enable_collision=bool(context.scene.minervha_enable_collision))
+        self._unused = introspect.unused_materials('COLLECTION', objs)
+        return None
+
+    # ── Modal stepping ─────────────────────────────────────────────────────
+    def _start_modal(self, context):
+        wm = context.window_manager
+        wm.progress_begin(0.0, 1.0)
+        self._timer = wm.event_timer_add(0.01, window=context.window)
+        wm.modal_handler_add(self)
         try:
-            report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
-                                                      position_scale=world_scale, level=level,
-                                                      tex_opts=self._tex_opts(context),
-                                                      material_baker=baker,
-                                                      thumbnail=_thumbnail_path(context),
-                                                      master_group=bool(context.scene.minervha_master_group),
-                                                      enable_collision=bool(context.scene.minervha_enable_collision))
-        finally:
-            if bake_tmp:
-                shutil.rmtree(bake_tmp, ignore_errors=True)
-        report["materialsUnused"] = introspect.unused_materials('COLLECTION', objs)
-        baked_n = len(report.get('materialsBaked') or [])
-        approx_n = len(report.get('materialsApproximated') or [])
-        self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV, %d baked, %d approx)" % (
-            self.filepath, ("map '%s'" % level) if level else "collection",
-            len(report['objectsExported']), len(report['meshesWritten']),
-            len(report['created']), len(report['noUv']), baked_n, approx_n))
+            context.window.cursor_modal_set('WAIT')
+        except Exception:
+            pass
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        if event.type == 'ESC':
+            return self._cancel(context)
+        if event.type == 'TIMER':
+            try:
+                finished = self._pump(context)
+            except Exception as exc:
+                return self._abort(context, exc)
+            if finished:
+                return self._finish(context)
+        return {'RUNNING_MODAL'}
+
+    def _pump(self, context):
+        """Advance the build generator within a ~20 ms budget; True when it's done."""
+        t0 = time.monotonic()
+        while True:
+            try:
+                self._phase, self._done, self._total = next(self._gen)
+            except StopIteration as e:
+                self._report = e.value
+                return True
+            if self._phase not in self._phase_start:
+                self._phase_start[self._phase] = time.monotonic() - self._t_start
+                self._phase_order.append(self._phase)
+            if time.monotonic() - t0 > 0.02:
+                break
+        self._update_progress(context)
+        return False
+
+    def _build_timeline(self, total_elapsed):
+        """Per-phase durations (label, seconds) from the recorded phase-start stamps."""
+        tl, order = [], self._phase_order
+        for i, ph in enumerate(order):
+            start = self._phase_start[ph]
+            end = self._phase_start[order[i + 1]] if i + 1 < len(order) else total_elapsed
+            tl.append((_PHASE_LABEL.get(ph, ph), max(0.0, end - start)))
+        return tl
+
+    def _write_log(self, context, report, elapsed, cancelled):
+        try:
+            text = wlsave_export.format_export_log(
+                report or {}, mode=self._mode or "scene", scope=_scope_label(context),
+                level=self._level, options=_options_label(context), dest=self.filepath,
+                elapsed=elapsed, cancelled=cancelled, timeline=self._build_timeline(elapsed))
+            _write_last_log(text)
+        except Exception:
+            pass   # logging must never break the export
+
+    def _update_progress(self, context):
+        total = self._total or 1
+        frac = max(0.0, min(1.0, self._done / total))
+        try:
+            context.window_manager.progress_update(frac)
+        except Exception:
+            pass
+        try:
+            context.workspace.status_text_set(
+                "Minervha export — %s %d/%d (%d%%)  ·  Esc to cancel" % (
+                    _PHASE_LABEL.get(self._phase, self._phase), self._done, self._total, int(frac * 100)))
+        except Exception:
+            pass
+
+    def _finish(self, context):
+        report = self._report or {}
+        report["materialsUnused"] = self._unused or []
+        elapsed = time.monotonic() - self._t_start
+        self._write_log(context, report, elapsed, cancelled=False)
+        self._cleanup(context)
+        if self._mode == 'scene':
+            baked_n = len(report.get('materialsBaked') or [])
+            approx_n = len(report.get('materialsApproximated') or [])
+            self.report({'INFO'}, "Built %s (%s) — %d objects, %d meshes, %d materials (%d no-UV, %d baked, %d approx) in %.1fs" % (
+                self.filepath, ("map '%s'" % self._level) if self._level else "collection",
+                len(report.get('objectsExported') or []), len(report.get('meshesWritten') or []),
+                len(report.get('created') or []), len(report.get('noUv') or []), baked_n, approx_n, elapsed))
+        else:
+            self.report({'INFO'}, "Built %s — %d materials, %d textures (%d missing) in %.1fs" % (
+                self.filepath, len(report.get('created') or []),
+                len(report.get('texturesCopied') or []) + len(report.get('texturesReExported') or []),
+                len(report.get('texturesMissing') or []), elapsed))
         self._popup(context, report)
         return {'FINISHED'}
+
+    def _cancel(self, context):
+        try:
+            if self._gen:
+                self._gen.close()       # GeneratorExit -> the build's finally cleans its tmpdir
+        except Exception:
+            pass
+        elapsed = time.monotonic() - self._t_start
+        self._write_log(context, self._report, elapsed, cancelled=True)
+        self._cleanup(context)
+        self.report({'WARNING'}, "Export cancelled — no .wlsave written")
+        return {'CANCELLED'}
+
+    def _abort(self, context, exc):
+        try:
+            if self._gen:
+                self._gen.close()
+        except Exception:
+            pass
+        self._cleanup(context)
+        self.report({'ERROR'}, "Export failed: %s" % exc)
+        return {'CANCELLED'}
+
+    def _cleanup(self, context):
+        wm = context.window_manager
+        if self._timer is not None:
+            try:
+                wm.event_timer_remove(self._timer)
+            except Exception:
+                pass
+            self._timer = None
+        try:
+            wm.progress_end()
+        except Exception:
+            pass
+        try:
+            context.workspace.status_text_set(None)
+        except Exception:
+            pass
+        try:
+            context.window.cursor_modal_restore()
+        except Exception:
+            pass
+        if self._bake_tmp:
+            shutil.rmtree(self._bake_tmp, ignore_errors=True)
+            self._bake_tmp = None
 
     def _popup(self, context, report):
         _print_missing_detail(report)   # full list to the console (the popup truncates)
@@ -362,6 +589,32 @@ class MINERVHA_OT_capture_thumbnail(bpy.types.Operator):
             return {'FINISHED'}
         self.report({'WARNING'}, "Viewport capture produced no image")
         return {'CANCELLED'}
+
+
+class MINERVHA_OT_open_log(bpy.types.Operator):
+    bl_idname = "minervha.open_log"
+    bl_label = "Open log in Text Editor"
+    bl_description = "Load the last export log into a Text datablock (shown if a Text Editor is open)"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        if not _LAST_LOG_TEXT:
+            self.report({'WARNING'}, "No export log yet")
+            return {'CANCELLED'}
+        name = "Minervha Export Log"
+        txt = bpy.data.texts.get(name) or bpy.data.texts.new(name)
+        txt.clear()
+        txt.write(_LAST_LOG_TEXT)
+        shown = False
+        for area in context.screen.areas:
+            if area.type == 'TEXT_EDITOR':
+                for space in area.spaces:
+                    if space.type == 'TEXT_EDITOR':
+                        space.text = txt
+                        shown = True
+                area.tag_redraw()
+        self.report({'INFO'}, "Loaded '%s'%s" % (name, "" if shown else " — open a Text Editor to view"))
+        return {'FINISHED'}
 
 
 def _print_missing_detail(report):
@@ -509,7 +762,35 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         box.operator("minervha.export_wlsave", icon='PACKAGE')
 
 
-_classes = (MINERVHA_OT_export_wlsave, MINERVHA_OT_capture_thumbnail, MINERVHA_PT_exporter)
+class MINERVHA_PT_log(bpy.types.Panel):
+    bl_label = "Last export log"
+    bl_idname = "MINERVHA_PT_log"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Minervha"
+    bl_parent_id = "MINERVHA_PT_exporter"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        if not _LAST_LOG_TEXT:
+            layout.label(text="No export yet — run an export.")
+            return
+        row = layout.row(align=True)
+        row.operator("minervha.open_log", icon='TEXT')
+        if _LAST_LOG_PATH:
+            row.operator("wm.path_open", text="Open file", icon='FILEBROWSER').filepath = _LAST_LOG_PATH
+        box = layout.box()
+        col = box.column(align=True)
+        lines = _LAST_LOG_TEXT.splitlines()
+        for ln in lines[:_LOG_PANEL_MAX_LINES]:
+            col.label(text=ln if ln.strip() else " ")
+        if len(lines) > _LOG_PANEL_MAX_LINES:
+            col.label(text="... (%d more lines — open the full log)" % (len(lines) - _LOG_PANEL_MAX_LINES))
+
+
+_classes = (MINERVHA_OT_export_wlsave, MINERVHA_OT_capture_thumbnail, MINERVHA_OT_open_log,
+            MINERVHA_PT_exporter, MINERVHA_PT_log)
 
 
 def register():
@@ -558,6 +839,7 @@ def register():
                     "image; re-encoded to PNG at 512 px. Use the camera button to capture the 3D viewport")
     for cls in _classes:
         bpy.utils.register_class(cls)
+    _load_last_log()        # show the previous run's log in the panel after a restart
 
 
 def unregister():

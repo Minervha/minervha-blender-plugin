@@ -129,6 +129,24 @@ Collisions** (Scene mode): one scene-wide toggle drives every UserMesh's `boolSe
 `ui.py` adds the three props (+ a "Scene options" box and a Thumbnail row with a capture button) and reports
 each in the popup. Plan: [`../docs/plans/features/export-options/plan.md`](../docs/plans/features/export-options/plan.md).
 
+**Responsive export + progress + last-export log (validated live Blender 5.1.2).** The export ran
+synchronously in `execute()` — on a 14740-object / 7682-mesh-datablock / 1421-image scene that froze Blender
+("Not Responding") for minutes with no progress (bpy is single-threaded, so `wm.obj_export` / `Image.save` /
+Cycles bake can't move off the main thread). Now the heavy build is **stepped**: `wlsave_export` exposes
+`_iter_build_scene_wlsave` / `_iter_build_wlsave` (+ `_iter_process_textures`, `_iter_build_material_entries`,
+`_drain`) — generators that `yield (phase, done, total)` at every per-item loop (textures, mesh OBJ export,
+byte reads) and `return` the report; the plain `build_*` names stay as thin `_drain` wrappers so the pure
+tests are unchanged. `_make_material_baker` is now a generator factory, `yield from`-ed so the (slow) Cycles
+bake is stepped too. `ui.MINERVHA_OT_export_wlsave` is a **modal operator**: brief synchronous setup
+(introspect/collect), then a TIMER pumps the generator within a ~20 ms budget per tick (Blender redraws
+between ticks → no freeze, status-bar progress + WAIT cursor), **Esc cancels** cleanly (`gen.close()` →
+the build's `try/finally` removes its tmpdir, no partial `.wlsave`). **Logs:** `wlsave_export.format_export_log`
+(pure) renders the report + a per-phase **timeline** as readable text; the operator writes it to a single
+overwritten `last_export.log` under `bpy.utils.extension_path_user(__package__)` and keeps it in memory; the
+**`MINERVHA_PT_log`** sub-panel shows it (capped) with "Open in Text Editor"/"Open file" buttons, and
+`register()` reloads it so the last run survives a restart. Plan:
+[`../docs/plans/features/responsive-export/plan.md`](../docs/plans/features/responsive-export/plan.md).
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
@@ -137,8 +155,10 @@ Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` —
 golden `expected_props.json` regenerable via `_gen_golden_props.py`; + `master_group` shape and the
 `enable_collision` toggle);
 `test_scene_build.py` (`build_scene_wlsave` end-to-end with OBJ export injected — Models/props/cross-ref; +
-master-group wrapping, collision propagation, thumbnail-as-first-PNG);
+master-group wrapping, collision propagation, thumbnail-as-first-PNG; + `_iter_build_scene_wlsave` progress
+events well-formed, clean cancel via `gen.close()`, and generator↔wrapper report parity);
 `test_thumbnail.py` (`_prepare_icon` pure path + `_write_zip` writes the icon before any texture + `bHasDedicatedIcon`);
+`test_logformat.py` (`format_export_log` — scene/materials/cancelled text, level label, timeline);
 `test_texture_collision.py` (dedup by srcPath, collision rename);
 `test_texture_options.py` (pure `_plan_texture` JPG/PNG/downscale decision + `tex_opts` end-to-end);
 `test_missing_report.py` (per-texture `missingDetail`: packed → material+meshes+channel+reason; on-disk

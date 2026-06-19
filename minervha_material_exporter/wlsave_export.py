@@ -203,7 +203,29 @@ def _export_image(image_name, dest_dir, used, target_format, jpg_quality, max_re
             pass
 
 
+# ── Progress protocol ──────────────────────────────────────────────────────
+# The `_iter_*` builders are generators that `yield (phase, done, total)` at every per-item
+# loop (so a modal operator can step them and stay responsive) and `return` the final report.
+# The plain `build_*` / `_process_textures` / `_build_material_entries` names are kept as thin
+# synchronous wrappers (run the generator to completion) so existing callers + the pure tests
+# are unchanged. phases: "bake" | "textures" | "map" | "read" | "meshes" | "props" | "zip".
+
+def _drain(gen):
+    """Run a progress generator to completion, ignoring its yields; return the value it
+    `return`s (PEP 380 StopIteration.value). The synchronous wrappers use this."""
+    try:
+        while True:
+            next(gen)
+    except StopIteration as e:
+        return e.value
+
+
 def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=None):
+    """Synchronous wrapper over `_iter_process_textures` (kept for direct callers/tests)."""
+    return _drain(_iter_process_textures(norms, tmpdir, prefer_jpg, jpg_quality, max_res))
+
+
+def _iter_process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=None):
     """Pre-pass over every texture in `norms`. Re-exports packed/generated/non-copyable
     images and (per `_plan_texture`) converts opaque textures to JPG and/or downscales to
     `max_res`, writing the result into `tmpdir` and mutating the texture dict in place into a
@@ -212,11 +234,14 @@ def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=N
     files) — keyed on srcPath, not basename, so the copied-vs-re-exported classification
     survives a later collision rename of the bundled basename. With `tex_opts` off
     (prefer_jpg False, max_res None) this reproduces the legacy 'packed/generated → PNG'
-    behavior; without bpy it re-exports nothing (pure-Python tests copy on-disk files)."""
+    behavior; without bpy it re-exports nothing (pure-Python tests copy on-disk files).
+
+    Generator: yields ("textures", i, total) after each material's textures are processed."""
     cache = {}      # image_name -> (path, basename) | None
     used = set()    # basenames already emitted into tmpdir
     reexported = set()
-    for norm in norms:
+    total = len(norms)
+    for i, norm in enumerate(norms, 1):
         for t in norm.get("textures") or []:
             if t.get("baked"):
                 continue  # the baker already wrote the final format/resolution; re-encoding here
@@ -241,6 +266,7 @@ def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=N
                 t["fileKind"], t["path"], t["basename"] = "path", res[0], res[1]
                 reexported.add(res[0])      # srcPath of the re-exported file
             # else: on-disk path -> copy as-is; packed/generated that failed -> mapper drops it
+        yield ("textures", i, total)
     return reexported
 
 
@@ -325,6 +351,11 @@ def _new_report(name, name_original, dest_path):
 
 
 def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
+    """Synchronous wrapper over `_iter_build_material_entries` (kept for direct callers/tests)."""
+    return _drain(_iter_build_material_entries(norms, name, report, tmpdir, tex_opts))
+
+
+def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None):
     """Map -> sanitize+dedup+namespace material names -> gather textures. Mutates `report`.
 
     Material names are namespaced "<name>/<final>" (both export modes); a prop's
@@ -333,12 +364,13 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
     pre-pass: {prefer_jpg, jpg_quality, max_res}. Returns (entries, tex_bytes,
     material_names) where material_names maps the original Blender material name ->
     its final namespaced customMaterials name.
-    """
+
+    Generator: yields ("textures"/"map"/"read", done, total) through its loops."""
     opts = tex_opts or {}
-    reexported = _process_textures(norms, tmpdir,
-                                   prefer_jpg=bool(opts.get("prefer_jpg")),
-                                   jpg_quality=int(opts.get("jpg_quality", 90)),
-                                   max_res=opts.get("max_res"))
+    reexported = yield from _iter_process_textures(norms, tmpdir,
+                                                   prefer_jpg=bool(opts.get("prefer_jpg")),
+                                                   jpg_quality=int(opts.get("jpg_quality", 90)),
+                                                   max_res=opts.get("max_res"))
 
     # Per-texture "what didn't make it, on which mesh, and why" detail (grouped by texture).
     #   missing:       (texture, reason) -> {texture, reason, materials/channels/objects: set}
@@ -367,7 +399,10 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
     # reused across channels/materials still dedups to a single bundled copy.
     taken, mapped, unique_tex, material_names = set(), [], {}, {}
     by_src, taken_bases = {}, set()
-    for norm in norms:
+    n_norms = len(norms)
+    for mi, norm in enumerate(norms, 1):
+        if mi % 128 == 0:
+            yield ("map", mi, n_norms)
         m = mapper.map_material(norm)
         if not m:
             report["skipped"].append(norm.get("name"))
@@ -420,7 +455,10 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
 
     # Read texture bytes (one per bundled basename); classify copied vs re-exported by srcPath.
     tex_bytes = {}
-    for b, src in unique_tex.items():
+    n_tex = len(unique_tex)
+    for ri, (b, src) in enumerate(unique_tex.items(), 1):
+        if ri % 32 == 0:
+            yield ("read", ri, n_tex)
         if src and os.path.isfile(src):
             with open(src, "rb") as fh:
                 tex_bytes[b] = fh.read()
@@ -468,6 +506,12 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thum
     report dict: name, nameOriginal, created[], renamed[], skipped[], texturesCopied[],
     texturesReExported[], texturesMissing[], texturesRenamed[], thumbnail.
     """
+    return _drain(_iter_build_wlsave(norms, name, dest_path, skeleton_path, tex_opts, thumbnail))
+
+
+def _iter_build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thumbnail=None):
+    """Generator form of `build_wlsave` — yields progress, returns the report. Owns its tmpdir
+    in a `try/finally`, so `gen.close()` on a cancelled modal run still cleans it up."""
     name_original = name
     name = _sanitize_name(name, "Collection")
     skel = _load_skeleton(skeleton_path)
@@ -475,12 +519,13 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thum
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_tex_")
     try:
-        entries, tex_bytes, _ = _build_material_entries(norms, name, report, tmpdir, tex_opts)
+        entries, tex_bytes, _ = yield from _iter_build_material_entries(norms, name, report, tmpdir, tex_opts)
         icon_bytes = _prepare_icon(thumbnail)
         skel["level"] = ""
         skel["customMaterials"] = entries
         skel["bHasDedicatedIcon"] = bool(icon_bytes)
         report["thumbnail"] = bool(icon_bytes)
+        yield ("zip", 0, 1)
         _write_zip(dest_path, name, skel, tex_bytes, icon_bytes=icon_bytes)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -525,6 +570,18 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
     proceduralMaterials[], meshesWritten[], materialsBaked[], materialNamespaced, level,
     thumbnail, masterGroup.
     """
+    return _drain(_iter_build_scene_wlsave(
+        norms, norm_objects, name, dest_path, obj_exporter, skeleton_path, position_scale, level,
+        tex_opts, material_baker, thumbnail, master_group, enable_collision))
+
+
+def _iter_build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
+                             position_scale=1.0, level="", tex_opts=None, material_baker=None,
+                             thumbnail=None, master_group=False, enable_collision=False):
+    """Generator form of `build_scene_wlsave` — yields ("bake"/"textures"/"map"/"read"/"meshes"/
+    "props"/"zip", done, total) and returns the report. Owns its tmpdir in a try/finally so a
+    cancelled modal run (`gen.close()`) still cleans up. `material_baker` may be a plain callable
+    `(norms)->baked[]` OR a generator factory (yields bake progress, returns baked[])."""
     name_original = name
     name = _sanitize_name(name, "Collection")
     skel = _load_skeleton(skeleton_path)
@@ -540,7 +597,10 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
         # Bake pre-pass (Scene mode only): flatten flagged channels into PNGs injected into `norms`
         # BEFORE mapping, so _process_textures/mapper see them as ordinary path textures.
         if material_baker is not None:
-            report["materialsBaked"] = material_baker(norms) or []
+            res = material_baker(norms)
+            # A generator factory yields bake progress and returns baked[]; a plain callable just
+            # returns baked[]. Support both so the UI can step the (slow) bake while tests pass None.
+            report["materialsBaked"] = ((yield from res) if hasattr(res, "__next__") else res) or []
             # A baked material whose look depends on per-mesh data (vertex colors / object-space)
             # can't be faithful as ONE shared texture — flag it (baked to a representative state).
             _baked_names = {b[0] for b in report["materialsBaked"]}
@@ -548,16 +608,23 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                 {"material": n.get("name"), "reasons": n.get("perMeshDependency")}
                 for n in norms
                 if n.get("name") in _baked_names and n.get("perMeshDependency")]
-        entries, tex_bytes, material_names = _build_material_entries(norms, name, report, tmpdir, tex_opts)
+        entries, tex_bytes, material_names = yield from _iter_build_material_entries(
+            norms, name, report, tmpdir, tex_opts)
 
-        # One OBJ per unique mesh datablock (instances reuse it).
+        # One OBJ per unique mesh datablock (instances reuse it). This loop is the export's long
+        # pole (one wm.obj_export per datablock) — yield per datablock so a modal driver stays
+        # responsive and shows mesh progress.
         models_dir = os.path.join(tmpdir, "Models")
         os.makedirs(models_dir, exist_ok=True)
         mesh_path_by_key, model_bytes, used_basenames, failed_keys = {}, {}, set(), set()
+        total_meshes = len({o.get("mesh_key") for o in norm_objects if o.get("mesh_key")})
+        done_meshes = 0
         for o in norm_objects:
             key = o.get("mesh_key")
             if not key or key in mesh_path_by_key or key in failed_keys:
                 continue
+            done_meshes += 1
+            yield ("meshes", done_meshes, total_meshes)
             basename = obj_exporter(key, models_dir, used_basenames)
             if not basename:
                 # Export failed: record it (so it isn't silent), don't retry the same datablock.
@@ -581,7 +648,8 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
 
         # Build props; tally the report.
         props = []
-        for o in norm_objects:
+        n_objs = len(norm_objects)
+        for pi, o in enumerate(norm_objects, 1):
             mp = mesh_path_by_key.get(o.get("mesh_key"))
             props.append(prop_mapper.map_object(o, mesh_path=mp, material_names=material_names,
                                                 position_scale=position_scale,
@@ -594,6 +662,8 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                 for pm in (v.get("procedural_materials") or []):
                     if pm not in report["proceduralMaterials"]:
                         report["proceduralMaterials"].append(pm)
+            if pi % 256 == 0:
+                yield ("props", pi, n_objs)
 
         # Optional master group: a single synthetic root Group parents every otherwise-root prop,
         # so the imported scene hangs off one node. Its identity transform keeps children placed.
@@ -612,8 +682,75 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
         skel["props"] = props
         skel["bHasDedicatedIcon"] = bool(icon_bytes)
         report["thumbnail"] = bool(icon_bytes)
+        yield ("zip", 0, 1)
         _write_zip(dest_path, name, skel, tex_bytes, model_bytes, icon_bytes=icon_bytes)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     return report
+
+
+def format_export_log(report, *, mode="scene", scope="", level="", options="", dest="",
+                      elapsed=0.0, cancelled=False, timeline=None):
+    """Render an export `report` (+ run context) as a human-readable text log. Pure — the UI
+    writes the result to the single overwritten last-export log and shows it in the panel.
+    `timeline` is a list of (phase_label, seconds)."""
+    lines = []
+    add = lines.append
+    add("Minervha export log — last run")
+    add("=" * 32)
+    if cancelled:
+        add("Result: CANCELLED (no .wlsave written)")
+    else:
+        add("Result: OK — %s" % ("map '%s'" % level if level else "collection"))
+    add("Mode: %s" % ("Scene" if mode == "scene" else "Materials"))
+    if scope:
+        add("Scope: %s" % scope)
+    if options:
+        add("Options: %s" % options)
+    if dest:
+        add("Output: %s" % dest)
+    add("Elapsed: %.1fs" % elapsed)
+
+    if timeline:
+        add("")
+        add("Timeline:")
+        for label, secs in timeline:
+            add("  %-18s %6.1fs" % (label, secs))
+
+    add("")
+    add("Results:")
+    add("  Materials created: %d" % len(report.get("created") or []))
+    add("  Textures: copied %d, re-encoded %d, missing %d" % (
+        len(report.get("texturesCopied") or []), len(report.get("texturesReExported") or []),
+        len(report.get("texturesMissing") or [])))
+    if "objectsExported" in report:                       # scene mode
+        add("  Objects exported: %d   (no-UV %d)" % (
+            len(report.get("objectsExported") or []), len(report.get("noUv") or [])))
+        add("  Meshes written: %d   (failed %d)" % (
+            len(report.get("meshesWritten") or []), len(report.get("meshExportFailed") or [])))
+        if report.get("materialsBaked"):
+            add("  Channels baked: %d   (approximated %d)" % (
+                len(report["materialsBaked"]), len(report.get("materialsApproximated") or [])))
+        add("  Master group: %s   Collisions: %s   Thumbnail: %s" % (
+            report.get("masterGroup") or "no",
+            "on" if report.get("enableCollision") else "off",
+            "yes" if report.get("thumbnail") else "no"))
+    else:
+        add("  Thumbnail: %s" % ("yes" if report.get("thumbnail") else "no"))
+    if report.get("materialsUnused"):
+        add("  Unused materials dropped: %d" % len(report["materialsUnused"]))
+    if report.get("needsBake"):
+        nch = sum(len(x.get("channels") or []) for x in report["needsBake"])
+        add("  Channels left empty (enable Bake): %d in %d material(s)" % (nch, len(report["needsBake"])))
+
+    detail = report.get("missingDetail") or []
+    if detail:
+        add("")
+        add("Not transported (%d):" % len(detail))
+        for d in detail:
+            chans = "/".join(d.get("channels") or [])
+            add("  - %s [%s]%s" % (d.get("texture"), d.get("reason"), ("  " + chans) if chans else ""))
+            add("      materials: %s" % (", ".join(d.get("materials") or []) or "-"))
+            add("      meshes:    %s" % (", ".join(d.get("objects") or []) or "-"))
+    return "\n".join(lines) + "\n"

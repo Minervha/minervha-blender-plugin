@@ -209,6 +209,62 @@ def test_no_thumbnail_leaves_flag_false():
     assert not any(n.endswith(".png") for n in names)
 
 
+_PHASES = {"bake", "textures", "map", "read", "meshes", "props", "zip"}
+
+
+def test_iter_progress_events_wellformed_and_clean_cancel():
+    objs = _fixtures()
+    norms = _material_norms(objs)
+    tmp = tempfile.mkdtemp(prefix="scene_iter_")
+    try:
+        dest = os.path.join(tmp, "out.wlsave")
+        gen = wlsave_export._iter_build_scene_wlsave(
+            norms, objs, NAME, dest, _fake_obj_exporter,
+            skeleton_path=os.path.join(PKG, "skeleton.json"))
+        events = []
+        for _ in range(2):                     # advance a few steps, then cancel mid-run
+            try:
+                events.append(next(gen))
+            except StopIteration:
+                break
+        gen.close()                            # cancel — must not raise (GeneratorExit handled by finally)
+        assert not os.path.exists(dest), "a cancelled export must not leave a .wlsave"
+        for ev in events:
+            phase, done, total = ev
+            assert phase in _PHASES, phase
+            assert 0 <= done <= total
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_iter_full_run_matches_wrapper():
+    objs = _fixtures()
+    norms = _material_norms(objs)
+    tmp = tempfile.mkdtemp(prefix="scene_iter2_")
+    try:
+        gen = wlsave_export._iter_build_scene_wlsave(
+            norms, objs, NAME, os.path.join(tmp, "a.wlsave"), _fake_obj_exporter,
+            skeleton_path=os.path.join(PKG, "skeleton.json"))
+        events, rep_gen = [], None
+        try:
+            while True:
+                events.append(next(gen))
+        except StopIteration as e:
+            rep_gen = e.value
+        rep_wrap = wlsave_export.build_scene_wlsave(
+            norms, objs, NAME, os.path.join(tmp, "b.wlsave"), _fake_obj_exporter,
+            skeleton_path=os.path.join(PKG, "skeleton.json"))
+        phases = [p for (p, d, t) in events]
+        # the mesh long-pole reached its total (4 unique datablocks) and the final zip phase fired.
+        assert ("meshes", 4, 4) in events, events
+        assert "zip" in phases
+        # generator (drained) and wrapper produce the same logical report.
+        for k in ("created", "meshesWritten", "objectsExported", "noUv", "masterGroup"):
+            assert rep_gen[k] == rep_wrap[k], k
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_materials_only_path_still_namespaces():
     # build_wlsave (materials-only) must keep working and now namespace names too.
     tmp = tempfile.mkdtemp(prefix="mat_test_")
