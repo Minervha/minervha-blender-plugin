@@ -62,10 +62,10 @@ MAX_RES_ITEMS = [
 
 
 BAKE_RES_ITEMS = [
-    ('512', "512 px", "Bake flagged channels at 512x512"),
-    ('1024', "1024 px", "Bake flagged channels at 1024x1024"),
-    ('2048', "2048 px", "Bake flagged channels at 2048x2048"),
-    ('4096', "4096 px", "Bake flagged channels at 4096x4096"),
+    ('512', "512 px", "Bake at most 512x512"),
+    ('1024', "1024 px", "Bake at most 1024x1024"),
+    ('2048', "2048 px", "Bake at most 2048x2048"),
+    ('4096', "4096 px", "Bake at most 4096x4096"),
 ]
 
 
@@ -74,16 +74,64 @@ _BAKE_CH_SLOT = {"diffuse": "Base Color", "roughness": "Roughness", "metallic": 
                  "normal": "Normal", "emissive": "Emission Color"}
 
 
-def _make_material_baker(tex_dir, resolution):
+def _next_pow2(n):
+    p = 1
+    while p < n:
+        p <<= 1
+    return p
+
+
+def _max_source_dim(mat):
+    """Largest pixel dimension among the material's SOURCE image textures (walking node groups),
+    or 0 if it has none (purely procedural). Drives the adaptive bake resolution."""
+    if not mat or not mat.use_nodes or mat.node_tree is None:
+        return 0
+    seen, stack, best = set(), [mat.node_tree], 0
+    while stack:
+        nt = stack.pop()
+        if nt is None or nt.name in seen:
+            continue
+        seen.add(nt.name)
+        for n in nt.nodes:
+            if n.type == "TEX_IMAGE" and getattr(n, "image", None) is not None:
+                try:
+                    best = max(best, int(n.image.size[0]), int(n.image.size[1]))
+                except Exception:
+                    pass
+            elif n.type == "GROUP" and getattr(n, "node_tree", None):
+                stack.append(n.node_tree)
+    return best
+
+
+def _adaptive_bake_res(mat, ceiling, max_res=None, floor=512, no_source_default=1024):
+    """Bake a material at the resolution of its largest source texture (pow2), never above the
+    user's `ceiling` (nor `max_res` if set), never below `floor`. Procedural-only (no source) ->
+    `no_source_default`. So a 512² material is baked 512², not the old fixed 2048²."""
+    cap = ceiling if not max_res else min(ceiling, int(max_res))
+    src = _max_source_dim(mat)
+    base = no_source_default if src <= 0 else _next_pow2(src)
+    return min(cap, max(floor, base))
+
+
+def _make_material_baker(tex_dir, ceiling, tex_opts):
     """Build the Scene-mode bake pre-pass passed to wlsave_export.build_scene_wlsave.
 
     Bakes the channels mapper flagged as `bakeCandidates` (procedural / multi-texture /
-    divergent-UV) on a throwaway full-UV placeholder plane (NEVER a scene mesh), writing PNGs into
+    divergent-UV) on a throwaway full-UV placeholder plane (NEVER a scene mesh), writing them into
     `tex_dir` and injecting them into `norms` as baked path textures (so the rest of the pipeline
     treats them as ordinary on-disk textures and the mapper resets tiling to identity).
 
-    One bake per material -> one shared texture, correct for every mesh that uses it (each samples it
-    through its own UVs). One CYCLES swap for the whole batch, restored on exit."""
+    The baker writes each texture in its FINAL format (`tex_opts['prefer_jpg']` -> JPEG, else PNG;
+    bake targets are alpha-free so JPEG is always valid) and at an ADAPTIVE resolution capped by the
+    user's `ceiling` (= the Bake resolution dropdown). Writing the format here is mandatory: the
+    downstream texture pre-pass can no longer re-encode a baked image (its bpy datablock is removed
+    right after the bake), which is why a baked channel used to ignore 'Prefer JPG' and ship a heavy
+    PNG. One bake per material -> one shared texture; one CYCLES swap for the whole batch."""
+    prefer_jpg = bool((tex_opts or {}).get("prefer_jpg"))
+    jpg_quality = int((tex_opts or {}).get("jpg_quality", 90))
+    max_res = (tex_opts or {}).get("max_res")
+    fmt, ext = ("JPEG", ".jpg") if prefer_jpg else ("PNG", ".png")
+
     def baker(norms):
         baked = []
         todo = []
@@ -105,10 +153,11 @@ def _make_material_baker(tex_dir, resolution):
             return baked
         with bake.bake_environment():
             for norm, mat, chans in todo:
+                res = _adaptive_bake_res(mat, ceiling, max_res)
                 for ch in chans:
                     safe = wlsave_export._sanitize_name(mat.name, "mat")
-                    out = os.path.join(tex_dir, "%s_%s.png" % (safe, ch))
-                    path = bake.bake_channel(mat, ch, resolution, out)
+                    out = os.path.join(tex_dir, "%s_%s%s" % (safe, ch, ext))
+                    path = bake.bake_channel(mat, ch, res, out, image_format=fmt, jpg_quality=jpg_quality)
                     if not path:
                         continue
                     slot = _BAKE_CH_SLOT[ch]
@@ -117,7 +166,7 @@ def _make_material_baker(tex_dir, resolution):
                     norm["textures"].insert(0, {
                         "name": "%s_%s" % (mat.name, ch), "fileKind": "path",
                         "path": path, "basename": os.path.basename(path),
-                        "slots": [slot], "mapping": None, "baked": True})
+                        "slots": [slot], "mapping": None, "baked": True, "has_alpha": False})
                     baked.append([mat.name, ch])
         return baked
     return baker
@@ -229,7 +278,8 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         bake_tmp, baker = None, None
         if context.scene.minervha_bake:
             bake_tmp = tempfile.mkdtemp(prefix="wlsave_bake_")
-            baker = _make_material_baker(bake_tmp, int(context.scene.minervha_bake_res))
+            baker = _make_material_baker(bake_tmp, int(context.scene.minervha_bake_res),
+                                         self._tex_opts(context))
         try:
             report = wlsave_export.build_scene_wlsave(norms, norm_objects, name, self.filepath, exporter,
                                                       position_scale=world_scale, level=level,
@@ -404,8 +454,11 @@ def register():
                     "multi-texture, divergent-UV) onto a UV-bearing mesh, into flat PBR textures. "
                     "Uses Cycles; only objects that already have UVs are baked")
     bpy.types.Scene.minervha_bake_res = EnumProperty(
-        name="Bake Resolution", items=BAKE_RES_ITEMS, default='2048',
-        description="Resolution of the baked PBR textures")
+        name="Bake Resolution (max)", items=BAKE_RES_ITEMS, default='2048',
+        description="Maximum bake resolution. Each material is baked at the resolution of its "
+                    "largest source texture (rounded up to a power of two), never exceeding this "
+                    "cap — so a 512px material is not baked at 4K. Procedural-only materials bake "
+                    "at 1024 (capped here)")
     bpy.types.Scene.minervha_flip_green = BoolProperty(
         name="Flip normal green (DirectX)", default=True,
         description="Wild Life reads DirectX-convention normal maps (green channel flipped). "

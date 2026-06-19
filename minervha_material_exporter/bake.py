@@ -199,11 +199,17 @@ def _emit_rewire(mat, input_name):
     return restore
 
 
-def bake_channel(mat, channel, resolution, out_path):
-    """Bake one WL channel of `mat` to a PNG at `out_path` on a throwaway full-UV placeholder plane
+def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_quality=90):
+    """Bake one WL channel of `mat` to `out_path` on a throwaway full-UV placeholder plane
     (NEVER a scene mesh); return the path, or None if the channel is not bakeable here (constant
     input / unknown channel). Must run inside `bake_environment()`. One bake per material -> one
-    shared texture, correct for every mesh that uses it."""
+    shared texture, correct for every mesh that uses it.
+
+    `image_format` ('PNG'|'JPEG') is the on-disk encoding the BAKER picks from the user's texture
+    options (the bake target is always `alpha=False`, so JPEG is always valid). Writing the final
+    format here is mandatory: the target Image is removed in this function's `finally`, so the
+    downstream texture pre-pass can no longer re-encode it (it would find no bpy image and silently
+    keep PNG) — hence a baked channel never honored 'Prefer JPG'. `out_path`'s extension must match."""
     spec = _CHANNEL_BAKE.get(channel)
     if spec is None:
         return None
@@ -228,8 +234,11 @@ def bake_channel(mat, channel, resolution, out_path):
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         img.filepath_raw = out_path
-        img.file_format = "PNG"
-        img.save()
+        img.file_format = image_format
+        if image_format == "JPEG":
+            img.save(quality=int(jpg_quality))
+        else:
+            img.save()
         return out_path
     finally:
         if restore is not None:

@@ -218,6 +218,9 @@ def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=N
     reexported = set()
     for norm in norms:
         for t in norm.get("textures") or []:
+            if t.get("baked"):
+                continue  # the baker already wrote the final format/resolution; re-encoding here
+                          # would only fail (its bpy image is gone) and silently keep the raw PNG
             kind = t.get("fileKind")
             if kind in ("missing", "udim"):
                 continue  # nothing to re-export (UDIM unsupported in v1)
