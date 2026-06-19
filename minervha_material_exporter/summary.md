@@ -184,6 +184,22 @@ and render settings are never touched. Also removed a latent waste: `placeholder
 scene cleaned up, user scene unchanged. Threaded the isolated `scene` through `bake_channel` /
 `placeholder_plane` / `_bake_into` / `_bake_alpha_into`; the baker passes the `bake_environment` scene.
 
+**Direct OBJ writer — geometry-phase speedup (validated live Blender 5.1.2).** The geometry phase was 7682
+sequential `wm.obj_export` calls; measured at **~117 ms/mesh** dominated by per-call overhead (a
+`select_all(DESELECT)` over the 14740-object scene ≈ 41 ms + `view_layer.update()` ×2 on that scene), NOT the
+tiny meshes (~94 polys avg). `obj_export.write_obj_direct` writes the `.obj` (+ `.mtl`) straight from the
+EVALUATED mesh (`obj.evaluated_get(depsgraph).to_mesh()` — modifiers, incl. cross-object, applied identically),
+pre-transforming vertices/normals through `wl_transform.geom_matrix()` × `global_scale` (the exact basis the
+operator bakes via `matrix_world`), reversing winding + dropping normals when the basis is mirrored, and reusing
+the existing `reorder_mtl_blocks` so the material-section order WL maps to `CustomMaterial{i}` is identical. No
+selection / matrix / depsgraph churn → side-effect-free and ~**17 ms/mesh** (~7× on a big-mesh-skewed sample,
+far more on the real tiny-mesh distribution: a 7682-mesh / 720k-poly scene drops from ~15 min to ~25-30 s).
+`format_obj_text` is pure (unit-tested); `make_obj_exporter` uses it when `USE_DIRECT_OBJ` and **falls back to
+the `wm.obj_export` operator on any failure**, so the validated path is always available. Live: 37 diverse
+meshes (multi-material / big / small) all geometry-equivalent to the operator — vertex positions ≤ 0.009 mm,
+identical UV sets, matching normal values, same usemtl section order. (bpy 4.1+ loop normals via
+`mesh.corner_normals`.) `tests/test_obj_direct.py` pins the text builder.
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
