@@ -49,6 +49,14 @@ via `_annotate_flip`, and `mapper.py` reads `norm.get("flipGreen", True)`. `intr
 niche heuristic — see plan chunk-08). Docs (chunk-09): MASTER addendum, schema note and this summary updated
 (owner-approved 2026-06-18).
 
+**Missing-texture detail.** `wlsave_export._build_material_entries` emits `report["missingDetail"]` — per
+texture (grouped), the **material(s) + consumer mesh(es) + channel(s) + reason** (`packed`/`generated`/`udim`/
+`missing path`/`file not found`) for everything that did NOT make it into the bundle. `ui.py` shows the first
+10 in the export popup and prints the full list to the system console (`_print_missing_detail`). Answers the
+user ask "the plugin says N missing — *which* texture on *which* mesh?". Additive report field (existing
+consumers/tests untouched); the material→object link reuses `introspect`'s `norm["objects"]`
+(`bsdf_trace.objects_using_material`).
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
@@ -58,4 +66,6 @@ golden `expected_props.json` regenerable via `_gen_golden_props.py`);
 `test_scene_build.py` (`build_scene_wlsave` end-to-end with OBJ export injected — Models/props/cross-ref);
 `test_texture_collision.py` (dedup by srcPath, collision rename);
 `test_texture_options.py` (pure `_plan_texture` JPG/PNG/downscale decision + `tex_opts` end-to-end);
+`test_missing_report.py` (per-texture `missingDetail`: packed → material+meshes+channel+reason; on-disk
+`file not found` tie-back; resolved texture → no entry);
 `verify_introspect_live.py` is a Blender-side probe (run in the Python console).

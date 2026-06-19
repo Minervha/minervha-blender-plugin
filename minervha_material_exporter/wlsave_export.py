@@ -254,7 +254,7 @@ def _new_report(name, name_original, dest_path):
         "name": name, "nameOriginal": name_original, "dest": dest_path,
         "created": [], "renamed": [], "skipped": [],
         "texturesCopied": [], "texturesReExported": [], "texturesMissing": [],
-        "texturesRenamed": [],
+        "texturesRenamed": [], "missingDetail": [],
     }
 
 
@@ -274,6 +274,25 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
                                    jpg_quality=int(opts.get("jpg_quality", 90)),
                                    max_res=opts.get("max_res"))
 
+    # Per-texture "what didn't make it, on which mesh, and why" detail (grouped by texture).
+    #   missing:       (texture, reason) -> {texture, reason, materials/channels/objects: set}
+    #   usage_by_base: final bundled basename -> the same usage sets, so an on-disk 'file not
+    #                  found' (detected when reading bytes below) can be tied back to its
+    #                  material(s)/mesh(es)/channel(s).
+    missing, usage_by_base = {}, {}
+
+    def _flag_missing(texture, reason, channel, material, objs):
+        rec = missing.get((texture or "?", reason))
+        if rec is None:
+            rec = missing[(texture or "?", reason)] = {
+                "texture": texture or "?", "reason": reason,
+                "materials": set(), "channels": set(), "objects": set()}
+        if material:
+            rec["materials"].add(material)
+        if channel:
+            rec["channels"].add(channel)
+        rec["objects"].update(objs or ())
+
     # Pass 1: map, sanitize + dedup + namespace names, gather unique textures by SOURCE path.
     # Textures are deduped by srcPath, NOT by basename: two distinct files that share a basename
     # (same name in different folders, or names that sanitise/NFKD-collapse to the same ASCII string)
@@ -288,6 +307,7 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
             report["skipped"].append(norm.get("name"))
             continue
         orig = m["entry"]["name"]                       # = Blender material name
+        objs = norm.get("objects") or []                # meshes/objects using this material
         final = _unique_name(_sanitize_name(orig, "Material"), taken)
         if final != orig:
             report["renamed"].append({"from": orig, "to": final})
@@ -296,6 +316,10 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
         m["entry"]["name"] = namespaced
         material_names[orig] = namespaced
         mapped.append(m)
+        # packed / generated / udim / missing-path textures: mapper found no file to copy.
+        for u in m["report"].get("unresolvedTextures", []):
+            _flag_missing(u.get("texture"), u.get("fileKind") or "unresolved",
+                          u.get("channel"), orig, objs)
         for t in m["textures"]:
             raw = t.get("basename")
             if not raw:
@@ -303,18 +327,26 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
             src = t.get("srcPath")
             if src is not None and src in by_src:
                 t["basename"] = by_src[src]             # same file reused -> one bundled copy
-                continue
-            b = _sanitize_basename(raw)
-            if b in taken_bases:                        # basename clash with a DIFFERENT source
-                b = _unique_basename(b, taken_bases)
-                report["texturesRenamed"].append({"from": raw, "to": b})
-            elif b != raw:
-                report["texturesRenamed"].append({"from": raw, "to": b})
-            taken_bases.add(b)
-            t["basename"] = b
-            unique_tex[b] = src
-            if src is not None:
-                by_src[src] = b
+            else:
+                b = _sanitize_basename(raw)
+                if b in taken_bases:                    # basename clash with a DIFFERENT source
+                    b = _unique_basename(b, taken_bases)
+                    report["texturesRenamed"].append({"from": raw, "to": b})
+                elif b != raw:
+                    report["texturesRenamed"].append({"from": raw, "to": b})
+                taken_bases.add(b)
+                t["basename"] = b
+                unique_tex[b] = src
+                if src is not None:
+                    by_src[src] = b
+            # remember which material/mesh/channel uses this bundled file (for the on-disk
+            # 'file not found' tie-back when reading bytes below).
+            usg = usage_by_base.setdefault(
+                t["basename"], {"materials": set(), "channels": set(), "objects": set()})
+            usg["materials"].add(orig)
+            if t.get("channel"):
+                usg["channels"].add(t["channel"])
+            usg["objects"].update(objs)
 
     # Read texture bytes (one per bundled basename); classify copied vs re-exported by srcPath.
     tex_bytes = {}
@@ -325,6 +357,15 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
             (report["texturesReExported"] if src in reexported else report["texturesCopied"]).append(b)
         else:
             report["texturesMissing"].append({"basename": b, "src": src})
+            usg = usage_by_base.get(b) or {}
+            rec = missing.get((b, "file not found"))
+            if rec is None:
+                rec = missing[(b, "file not found")] = {
+                    "texture": b, "reason": "file not found",
+                    "materials": set(), "channels": set(), "objects": set()}
+            rec["materials"].update(usg.get("materials") or ())
+            rec["channels"].update(usg.get("channels") or ())
+            rec["objects"].update(usg.get("objects") or ())
 
     # Pass 2: finalize entries with only resolved texture paths.
     entries = []
@@ -334,6 +375,14 @@ def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
         entry["name"] = m["entry"]["name"]
         entries.append(entry)
         report["created"].append(entry["name"])
+
+    # Flatten the grouped detail into the report (deterministic order: by texture then reason).
+    report["missingDetail"] = [
+        {"texture": r["texture"], "reason": r["reason"],
+         "materials": sorted(r["materials"]), "channels": sorted(r["channels"]),
+         "objects": sorted(r["objects"])}
+        for _, r in sorted(missing.items(), key=lambda kv: kv[0])
+    ]
 
     return entries, tex_bytes, material_names
 

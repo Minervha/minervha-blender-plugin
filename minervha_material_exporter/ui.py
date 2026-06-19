@@ -257,10 +257,28 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         return {'FINISHED'}
 
     def _popup(self, context, report):
+        _print_missing_detail(report)   # full list to the console (the popup truncates)
         try:
             _popup_report(context, report)
         except Exception:
             pass  # popup needs UI context; the status-bar report above always fires
+
+
+def _print_missing_detail(report):
+    """Echo the full 'which texture, on which mesh, wasn't transported' list to the system
+    console (the popup truncates to the first 10). Best-effort — never raises."""
+    try:
+        detail = report.get('missingDetail') or []
+        if not detail:
+            return
+        print("Minervha — %d texture(s) not transported:" % len(detail))
+        for d in detail:
+            print("  - %s [%s] (%s)  mat: %s  meshes: %s" % (
+                d.get('texture'), d.get('reason'), "/".join(d.get('channels') or []) or "-",
+                ", ".join(d.get('materials') or []) or "-",
+                ", ".join(d.get('objects') or []) or "-"))
+    except Exception:
+        pass
 
 
 def _popup_report(context, report):
@@ -296,6 +314,20 @@ def _popup_report(context, report):
                 layout.label(text="Procedural materials: %d (enable Bake)" % len(report['proceduralMaterials']), icon=icon)
             if report.get('meshExportFailed'):
                 layout.label(text="Meshes failed to export: %d" % len(report['meshExportFailed']), icon='ERROR')
+        # Per-texture detail: which texture, on which material + meshes, wasn't transported.
+        detail = report.get('missingDetail') or []
+        if detail:
+            layout.separator()
+            layout.label(text="Not transported — fix manually:", icon='ERROR')
+            for d in detail[:10]:
+                chans = "/".join(d.get('channels') or [])
+                layout.label(text="• %s  [%s]%s" % (
+                    d['texture'], d['reason'], ("  " + chans) if chans else ""))
+                layout.label(text="     %s  ->  %s" % (
+                    ", ".join(d.get('materials') or []) or "-",
+                    ", ".join(d.get('objects') or []) or "-"))
+            if len(detail) > 10:
+                layout.label(text="  ...and %d more (full list in the system console)" % (len(detail) - 10))
     context.window_manager.popup_menu(draw, title="Minervha — Export report", icon='CHECKMARK')
 
 
