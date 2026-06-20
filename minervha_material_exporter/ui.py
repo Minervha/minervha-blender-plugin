@@ -13,6 +13,7 @@ import time
 import traceback
 
 import bpy
+from bpy.app.handlers import persistent
 from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper
 
@@ -314,6 +315,40 @@ def _thumbnail_path(context):
     if not raw:
         return None
     return os.path.abspath(bpy.path.abspath(raw))
+
+
+# ── Export name pre-fill (from the .blend filename) ─────────────────────────
+
+def _prefill_export_name(scene):
+    """Set the .wlsave Name to the .blend's filename, unless the user already chose a name.
+
+    Only overwrites the empty/default ('MyMaterials') value, so a deliberately-set name survives
+    reloads. No-op for an unsaved file (no .blend name yet)."""
+    base = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
+    cur = (scene.minervha_wlsave_name or "").strip()
+    if base and cur in ("", "MyMaterials") and scene.minervha_wlsave_name != base:
+        scene.minervha_wlsave_name = base
+
+
+@persistent
+def _on_load_prefill_name(_dummy):
+    """load_post handler: pre-fill every scene's export name from the freshly-opened .blend."""
+    for scene in bpy.data.scenes:
+        try:
+            _prefill_export_name(scene)
+        except Exception:
+            pass
+
+
+def _prefill_current_file():
+    """One-shot timer: pre-fill the already-open file once bpy.data is unrestricted (it is
+    restricted during register(), so the current file can't be touched there)."""
+    for scene in bpy.data.scenes:
+        try:
+            _prefill_export_name(scene)
+        except Exception:
+            pass
+    return None
 
 
 # ── Export guardrails: preferences access ───────────────────────────────────
@@ -1113,9 +1148,20 @@ def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
     _load_last_log()        # show the previous run's log in the panel after a restart
+    if _on_load_prefill_name not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_on_load_prefill_name)
+    # The open file's scenes: bpy.data is restricted during register(), so defer one tick.
+    try:
+        bpy.app.timers.register(_prefill_current_file, first_interval=0.0)
+    except Exception:
+        pass
 
 
 def unregister():
+    if _on_load_prefill_name in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_on_load_prefill_name)
+    if bpy.app.timers.is_registered(_prefill_current_file):
+        bpy.app.timers.unregister(_prefill_current_file)
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
     for prop in ("minervha_export_mode", "minervha_export_target", "minervha_scope",
