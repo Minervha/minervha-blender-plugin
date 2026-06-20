@@ -601,7 +601,7 @@ def _iter_build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter,
     report = _new_report(name, name_original, dest_path)
     report.update({"objectsExported": [], "objectsSkipped": [], "noUv": [],
                    "proceduralMaterials": [], "meshesWritten": [], "meshExportFailed": [],
-                   "materialsBaked": [], "materialsApproximated": [],
+                   "materialsBaked": [], "materialsApproximated": [], "bakeFailed": [],
                    "materialNamespaced": True, "level": level,
                    "thumbnail": False, "masterGroup": None, "enableCollision": bool(enable_collision)})
 
@@ -621,6 +621,11 @@ def _iter_build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter,
                 {"material": n.get("name"), "reasons": n.get("perMeshDependency")}
                 for n in norms
                 if n.get("name") in _baked_names and n.get("perMeshDependency")]
+            # Materials the baker tagged as failed (a bake raised, isolated per-material so the run
+            # survives): the channel stays un-baked and degrades like Bake-off. Surface them, never
+            # lose the whole export over one bad material.
+            report["bakeFailed"] = [{"material": n.get("name"), "error": n.get("bakeFailed")}
+                                    for n in norms if n.get("bakeFailed")]
         entries, tex_bytes, material_names = yield from _iter_build_material_entries(
             norms, name, report, tmpdir, tex_opts)
 
@@ -704,15 +709,18 @@ def _iter_build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter,
 
 
 def format_export_log(report, *, mode="scene", scope="", level="", options="", dest="",
-                      elapsed=0.0, cancelled=False, timeline=None):
+                      elapsed=0.0, cancelled=False, timeline=None, error=None):
     """Render an export `report` (+ run context) as a human-readable text log. Pure — the UI
     writes the result to the single overwritten last-export log and shows it in the panel.
-    `timeline` is a list of (phase_label, seconds)."""
+    `timeline` is a list of (phase_label, seconds). `error` (text, with traceback) marks the run
+    FAILED and is appended verbatim so a crashed export leaves a real diagnostic, not a stale OK."""
     lines = []
     add = lines.append
     add("Minervha export log — last run")
     add("=" * 32)
-    if cancelled:
+    if error:
+        add("Result: FAILED — %s" % (error.strip().splitlines() or ["error"])[0])
+    elif cancelled:
         add("Result: CANCELLED (no .wlsave written)")
     else:
         add("Result: OK — %s" % ("map '%s'" % level if level else "collection"))
@@ -745,6 +753,8 @@ def format_export_log(report, *, mode="scene", scope="", level="", options="", d
         if report.get("materialsBaked"):
             add("  Channels baked: %d   (approximated %d)" % (
                 len(report["materialsBaked"]), len(report.get("materialsApproximated") or [])))
+        if report.get("bakeFailed"):
+            add("  Bakes failed: %d (channels left un-baked — see detail below)" % len(report["bakeFailed"]))
         add("  Master group: %s   Collisions: %s   Thumbnail: %s" % (
             report.get("masterGroup") or "no",
             "on" if report.get("enableCollision") else "off",
@@ -766,4 +776,17 @@ def format_export_log(report, *, mode="scene", scope="", level="", options="", d
             add("  - %s [%s]%s" % (d.get("texture"), d.get("reason"), ("  " + chans) if chans else ""))
             add("      materials: %s" % (", ".join(d.get("materials") or []) or "-"))
             add("      meshes:    %s" % (", ".join(d.get("objects") or []) or "-"))
+
+    bake_failed = report.get("bakeFailed") or []
+    if bake_failed:
+        add("")
+        add("Bakes failed (%d) — material exported, channel left un-baked:" % len(bake_failed))
+        for b in bake_failed:
+            add("  - %s: %s" % (b.get("material") or "?", b.get("error") or "?"))
+
+    if error:
+        add("")
+        add("Error detail:")
+        for ln in error.strip().splitlines():
+            add("  " + ln)
     return "\n".join(lines) + "\n"

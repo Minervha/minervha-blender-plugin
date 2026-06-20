@@ -208,6 +208,28 @@ Shrinkwrap to another object) — the operator path sets `matrix_world` before e
 and corrupts the modifier; the direct writer reads the evaluated mesh at the object's real position, so it is
 *more* correct there, not identical to the old output.
 
+**Crash-safety hardening — exports no longer vanish mid-run (pure tests green; registration verified headless
+Blender 5.1.2).** Diagnosed from a live incident: a Scene export on the 15424-object / 1166-material
+`ResortMadness` scene baked **454** textures then stopped — no `.wlsave`, the panel still showing the *previous*
+run's "OK", Blender idle (3 % of a core). Root cause was structural, not one bug: the modal export holds a temp
+dir + an **isolated bake scene** (kept open across a suspended `with`) + a WM timer + the WAIT cursor across
+hundreds of `yield`s, and **all** teardown lived only in `_finish`/`_abort`/`_cancel`. Four fixes: **(1)**
+`MINERVHA_OT_export_wlsave` had **no Blender `cancel()` hook**, so an *external* modal cancellation (file load,
+area close, the operator pre-empted on a heavy scene) skipped every teardown → leaked temp dir + bake scene +
+timer + zombie cursor, and no log — confirmed post-mortem: the running operator had no `cancel` attr and both
+`_wl_bake_scene` and the bake tmpdir had survived. Added `cancel()` delegating to the ESC path. **(2)** The bake
+loop had **no per-material isolation** — `bake.bake_channel` is `try/finally` only and `_make_material_baker`'s
+`baker()` called it bare, so a single `bpy.ops.object.bake()` `RuntimeError` (out of hundreds) aborted the whole
+multi-minute run (unlike `obj_export`/`_export_image`, which return `None` on failure). `baker()` now wraps each
+material in `try/except`, tags `norm["bakeFailed"]`, and continues (the channel degrades exactly like Bake-off);
+`build_scene_wlsave` harvests `report["bakeFailed"]`, and `format_export_log` + the popup surface it. **(3)**
+`_abort` skipped `_write_log`, so a crash left the panel on the previous run's "OK" — it now writes a **FAILED
+log with the captured traceback** (`format_export_log(error=…)`, captured before `gen.close()` clobbers the
+exception state). **(4)** `ui._sweep_stale_tempdirs` clears orphaned `wlsave_*` working dirs (idle >12 h) at
+export start (3 had leaked, ~250 MB). Net effect: the bake pipeline now degrades gracefully and self-documents,
+matching how `obj_export` already behaved. Pure suite green (15 files); headless enable on Blender 5.1.2
+confirms the `cancel` hook is present and the FAILED / `bakeFailed` rendering works.
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);

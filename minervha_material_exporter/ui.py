@@ -10,6 +10,7 @@ import os
 import shutil
 import tempfile
 import time
+import traceback
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
@@ -230,28 +231,38 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
         with bake.bake_environment() as bake_scene:
             for i, (norm, mat, chans) in enumerate(todo, 1):
                 yield ("bake", i, len(todo))
-                res = _adaptive_bake_res(mat, ceiling, max_res)
-                # A material that USES transparency (Alpha linked or < 1) needs its Base Color bake
-                # to carry the mask in an alpha channel -> bake alpha + force PNG for that channel.
-                uses_alpha = wlsave_export._material_uses_alpha(norm)
-                for ch in chans:
-                    ch_alpha = uses_alpha and ch == "diffuse"
-                    ch_fmt, ch_ext = ("PNG", ".png") if ch_alpha else (fmt, ext)
-                    safe = wlsave_export._sanitize_name(mat.name, "mat")
-                    out = os.path.join(tex_dir, "%s_%s%s" % (safe, ch, ch_ext))
-                    path = bake.bake_channel(mat, ch, res, out, image_format=ch_fmt,
-                                             jpg_quality=jpg_quality, bake_alpha=ch_alpha,
-                                             scene=bake_scene)
-                    if not path:
-                        continue
-                    slot = _BAKE_CH_SLOT[ch]
-                    norm["textures"] = [t for t in (norm.get("textures") or [])
-                                        if slot not in (t.get("slots") or [])]
-                    norm["textures"].insert(0, {
-                        "name": "%s_%s" % (mat.name, ch), "fileKind": "path",
-                        "path": path, "basename": os.path.basename(path),
-                        "slots": [slot], "mapping": None, "baked": True, "has_alpha": ch_alpha})
-                    baked.append([mat.name, ch])
+                try:
+                    res = _adaptive_bake_res(mat, ceiling, max_res)
+                    # A material that USES transparency (Alpha linked or < 1) needs its Base Color
+                    # bake to carry the mask in an alpha channel -> bake alpha + force PNG for it.
+                    uses_alpha = wlsave_export._material_uses_alpha(norm)
+                    for ch in chans:
+                        ch_alpha = uses_alpha and ch == "diffuse"
+                        ch_fmt, ch_ext = ("PNG", ".png") if ch_alpha else (fmt, ext)
+                        safe = wlsave_export._sanitize_name(mat.name, "mat")
+                        out = os.path.join(tex_dir, "%s_%s%s" % (safe, ch, ch_ext))
+                        path = bake.bake_channel(mat, ch, res, out, image_format=ch_fmt,
+                                                 jpg_quality=jpg_quality, bake_alpha=ch_alpha,
+                                                 scene=bake_scene)
+                        if not path:
+                            continue
+                        slot = _BAKE_CH_SLOT[ch]
+                        norm["textures"] = [t for t in (norm.get("textures") or [])
+                                            if slot not in (t.get("slots") or [])]
+                        norm["textures"].insert(0, {
+                            "name": "%s_%s" % (mat.name, ch), "fileKind": "path",
+                            "path": path, "basename": os.path.basename(path),
+                            "slots": [slot], "mapping": None, "baked": True, "has_alpha": ch_alpha})
+                        baked.append([mat.name, ch])
+                except Exception as exc:
+                    # One material's bake failing must NOT abort the whole export — the #1 fragility:
+                    # a single bpy.ops.object.bake() RuntimeError, on a scene with hundreds of bakes,
+                    # killed the entire multi-minute run. Tag the norm (the orchestrator reports it);
+                    # the channel just stays un-baked -> mapper degrades it exactly like Bake-off.
+                    # bake_channel's own finally already restored the node tree + freed the image.
+                    norm["bakeFailed"] = str(exc) or exc.__class__.__name__
+                    print("Minervha: bake failed for material '%s' (%s) — skipped, export continues"
+                          % (getattr(mat, "name", "?"), exc))
         return baked
     return baker
 
@@ -304,6 +315,32 @@ def _thumbnail_path(context):
     return os.path.abspath(bpy.path.abspath(raw))
 
 
+# Stale-tempdir janitor. A force-cancelled export leaves its wlsave_* working dir in TEMP (the cancel
+# hook now prevents this going forward, but historical/edge-case orphans still pile up — each bake run
+# is ~80 MB). Sweep dirs idle for this many hours at export start: long enough to never touch a live
+# export (they run minutes) nor one the user is still inspecting right after a crash.
+_TEMP_SWEEP_AGE_H = 12
+
+
+def _sweep_stale_tempdirs():
+    """Best-effort: remove orphaned wlsave_* working dirs older than _TEMP_SWEEP_AGE_H hours. Never
+    raises (housekeeping must not block an export)."""
+    try:
+        root = tempfile.gettempdir()
+        cutoff = time.time() - _TEMP_SWEEP_AGE_H * 3600.0
+        for nm in os.listdir(root):
+            if not nm.startswith(("wlsave_bake_", "wlsave_scene_", "wlsave_tex_", "wlsave_icon_")):
+                continue
+            p = os.path.join(root, nm)
+            try:
+                if os.path.isdir(p) and os.path.getmtime(p) < cutoff:
+                    shutil.rmtree(p, ignore_errors=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     bl_idname = "minervha.export_wlsave"
     bl_label = "Export .wlsave"
@@ -322,6 +359,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         and a progress bar advances; Esc cancels cleanly. Returns RUNNING_MODAL on success."""
         name = (context.scene.minervha_wlsave_name or "").strip()
         self._reset_state()
+        _sweep_stale_tempdirs()               # clear orphaned wlsave_* dirs from past crashed runs
         prep = (self._prepare_scene if context.scene.minervha_export_mode == 'SCENE'
                 else self._prepare_materials)(context, name)
         if prep is not None:
@@ -430,6 +468,15 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
                 return self._finish(context)
         return {'RUNNING_MODAL'}
 
+    def cancel(self, context):
+        """Blender's force-cancel hook — called when the modal is terminated EXTERNALLY (file load,
+        area/window close, the operator pre-empted) without modal() returning. WITHOUT this method
+        none of our teardown runs: the temp dir, the bake scene (held open by a suspended `with`),
+        the WM timer, the WAIT cursor and the progress bar all leak, and no log is written — the
+        diagnosed cause of exports that 'vanish' mid-run. Reuse the ESC cancel path so an external
+        cancel is as clean as a user cancel (Blender ignores the return value)."""
+        self._cancel(context)
+
     # Work budget per timer tick. Bigger = fewer viewport redraws between chunks (the redraw of a
     # heavy scene is pure overhead during export) → faster, more useful CPU; smaller = smoother UI.
     # 50 ms keeps ~20 progress updates/sec (Esc still responsive) while cutting redraw waste.
@@ -461,12 +508,13 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             tl.append((_PHASE_LABEL.get(ph, ph), max(0.0, end - start)))
         return tl
 
-    def _write_log(self, context, report, elapsed, cancelled):
+    def _write_log(self, context, report, elapsed, cancelled, error=None):
         try:
             text = wlsave_export.format_export_log(
                 report or {}, mode=self._mode or "scene", scope=_scope_label(context),
                 level=self._level, options=_options_label(context), dest=self.filepath,
-                elapsed=elapsed, cancelled=cancelled, timeline=self._build_timeline(elapsed))
+                elapsed=elapsed, cancelled=cancelled, timeline=self._build_timeline(elapsed),
+                error=error)
             _write_last_log(text)
         except Exception:
             pass   # logging must never break the export
@@ -519,11 +567,18 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         return {'CANCELLED'}
 
     def _abort(self, context, exc):
+        # Capture the traceback BEFORE closing the generator: _gen.close() runs the build's finally
+        # blocks and would clobber the live exception state. Persist it so a crashed export leaves a
+        # real diagnostic in the panel (FAILED + traceback) instead of silently keeping the previous
+        # run's "OK" — the misleading behavior that hid these failures.
+        tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         try:
             if self._gen:
                 self._gen.close()
         except Exception:
             pass
+        elapsed = time.monotonic() - self._t_start
+        self._write_log(context, self._report, elapsed, cancelled=False, error="%s\n\n%s" % (exc, tb))
         self._cleanup(context)
         self.report({'ERROR'}, "Export failed: %s" % exc)
         return {'CANCELLED'}
@@ -693,6 +748,8 @@ def _popup_report(context, report):
                 layout.label(text="Procedural materials: %d (enable Bake)" % len(report['proceduralMaterials']), icon=icon)
             if report.get('meshExportFailed'):
                 layout.label(text="Meshes failed to export: %d" % len(report['meshExportFailed']), icon='ERROR')
+            if report.get('bakeFailed'):
+                layout.label(text="Bakes failed: %d (channel left un-baked)" % len(report['bakeFailed']), icon='ERROR')
         # Per-texture detail: which texture, on which material + meshes, wasn't transported.
         detail = report.get('missingDetail') or []
         if detail:
