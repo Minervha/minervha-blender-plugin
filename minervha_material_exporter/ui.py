@@ -320,13 +320,11 @@ def _thumbnail_path(context):
 # ── Export name pre-fill (from the .blend filename) ─────────────────────────
 
 def _prefill_export_name(scene):
-    """Set the .wlsave Name to the .blend's filename, unless the user already chose a name.
-
-    Only overwrites the empty/default ('MyMaterials') value, so a deliberately-set name survives
-    reloads. No-op for an unsaved file (no .blend name yet)."""
+    """Force the .wlsave Name to the open .blend's filename on every load — the export name
+    always tracks the .blend name (overwrites any prior value, incl. a user-typed one). No-op for
+    an unsaved file (no .blend name yet), and skips the write when already correct."""
     base = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
-    cur = (scene.minervha_wlsave_name or "").strip()
-    if base and cur in ("", "MyMaterials") and scene.minervha_wlsave_name != base:
+    if base and scene.minervha_wlsave_name != base:
         scene.minervha_wlsave_name = base
 
 
