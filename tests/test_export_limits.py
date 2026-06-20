@@ -74,6 +74,14 @@ def test_experimental_disables_everything():
     assert export_limits.evaluate(b, T, experimental=True) == []
 
 
+def test_dim_histogram():
+    inv = [("a", 4096, 4096), ("b", 2048, 1024), ("c", 1024, 1024),
+           ("d", 4096, 2048), ("e", 1024, 1024), ("f", 1024, 1024)]
+    # bucket by longest side, largest dimension first
+    assert export_limits.dim_histogram(inv) == [(4096, 2), (2048, 1), (1024, 3)]
+    assert export_limits.dim_histogram([]) == []
+
+
 def test_clamp_max_res():
     c = export_limits.clamp_max_res
     assert c(None, False) == 8192          # no user cap -> the rule

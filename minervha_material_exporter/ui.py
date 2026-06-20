@@ -399,7 +399,6 @@ def _format_soft_warning(violations):
 # ── Export guardrails: panel drawing ────────────────────────────────────────
 
 _BUDGET_MESH_MAX = 6          # heavy-mesh rows shown in the budget box
-_TEX_INVENTORY_MAX = 20       # rows shown in the texture-inventory sub-panel
 
 
 def _fmt_compact(n):
@@ -429,9 +428,11 @@ def _usage_row(layout, value, soft, hard, text):
 
 
 def _draw_budget(layout, context):
-    """The 'Export budget' box: scene faces + geometries usage bars, heavy-mesh bars, banner."""
+    """The 'Export budget' box: scene faces + geometries usage bars, heavy-mesh bars, a texture
+    resolution histogram (N× dimension), and the experimental banner."""
     try:
-        budget = export_limits.gather_scene_budget(_scene_objects(context))
+        objs = _scene_objects(context)
+        budget = export_limits.gather_scene_budget(objs)
         prefs = _addon_prefs(context)
         experimental = bool(prefs.experimental_mode) if prefs is not None else False
         th = _thresholds(prefs)
@@ -459,28 +460,18 @@ def _draw_budget(layout, context):
         if len(offenders) > _BUDGET_MESH_MAX:
             box.label(text="... (+%d more)" % (len(offenders) - _BUDGET_MESH_MAX))
 
-
-def _draw_texture_inventory(layout, context):
-    """Source-texture inventory, largest dimension first; marks images the 8k rule will downscale."""
+    # Texture resolution histogram: count of in-scope source images per longest-side dimension.
     try:
-        mats_scope = context.scene.minervha_export_mode == 'MATERIALS'
-        objects = _objects_for_scope(context) if mats_scope else _scene_objects(context)
-        inv = export_limits.gather_texture_inventory(objects)
-        experimental = _experimental(context)
+        hist = export_limits.dim_histogram(export_limits.gather_texture_inventory(objs))
     except Exception:
-        layout.label(text="(inventory unavailable)")
-        return
-    if not inv:
-        layout.label(text="No source textures in scope.")
-        return
-    col = layout.column(align=True)
-    for name, w, h in inv[:_TEX_INVENTORY_MAX]:
-        over = max(w, h) > export_limits.MAX_TEXTURE_DIM and not experimental
-        row = col.row(align=True)
-        row.label(text="%d×%d" % (w, h), icon='TRIA_DOWN' if over else 'IMAGE_DATA')
-        row.label(text=name)
-    if len(inv) > _TEX_INVENTORY_MAX:
-        col.label(text="... (+%d more)" % (len(inv) - _TEX_INVENTORY_MAX))
+        hist = []
+    if hist:
+        box.label(text="Textures:")
+        col = box.column(align=True)
+        for dim, count in hist:
+            over = dim > export_limits.MAX_TEXTURE_DIM and not experimental
+            col.label(text="%d×  %d px" % (count, dim),
+                      icon='TRIA_DOWN' if over else 'IMAGE_DATA')
 
 
 # Stale-tempdir janitor. A force-cancelled export leaves its wlsave_* working dir in TEMP (the cancel
@@ -1038,19 +1029,6 @@ class MINERVHA_PT_log(bpy.types.Panel):
             col.label(text="... (%d more lines — open the full log)" % (len(lines) - _LOG_PANEL_MAX_LINES))
 
 
-class MINERVHA_PT_texture_inventory(bpy.types.Panel):
-    bl_label = "Texture inventory"
-    bl_idname = "MINERVHA_PT_texture_inventory"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Minervha"
-    bl_parent_id = "MINERVHA_PT_exporter"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        _draw_texture_inventory(self.layout, context)
-
-
 class MINERVHA_AddonPreferences(bpy.types.AddonPreferences):
     """Configurable export guardrail thresholds + the Experimental override. Global (per-add-on)."""
     bl_idname = __package__
@@ -1085,7 +1063,7 @@ class MINERVHA_AddonPreferences(bpy.types.AddonPreferences):
 
 _classes = (MINERVHA_AddonPreferences,
             MINERVHA_OT_export_wlsave, MINERVHA_OT_capture_thumbnail, MINERVHA_OT_open_log,
-            MINERVHA_PT_exporter, MINERVHA_PT_log, MINERVHA_PT_texture_inventory)
+            MINERVHA_PT_exporter, MINERVHA_PT_log)
 
 
 def register():

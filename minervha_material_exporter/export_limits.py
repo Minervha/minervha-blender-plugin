@@ -117,6 +117,18 @@ def gather_texture_inventory(objects):
     return sorted(images.values(), key=lambda t: max(t[1], t[2]), reverse=True)
 
 
+def dim_histogram(inventory):
+    """[(name, w, h), ...] -> [(longest_side, count), ...] sorted by dimension, largest first.
+
+    Pure aggregation of gather_texture_inventory's output into a compact 'N× DIM' breakdown.
+    """
+    counts = {}
+    for _name, w, h in inventory:
+        d = max(w, h)
+        counts[d] = counts.get(d, 0) + 1
+    return sorted(counts.items(), key=lambda kv: kv[0], reverse=True)
+
+
 # ── pure decision logic (no bpy) ─────────────────────────────────────────────
 
 def clamp_max_res(user_max_res, experimental):
