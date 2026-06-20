@@ -17,9 +17,10 @@ from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, 
 from bpy_extras.io_utils import ExportHelper
 
 try:
-    from . import introspect, wlsave_export, scene_introspect, obj_export, bake, mapper   # packaged extension
+    from . import (introspect, wlsave_export, scene_introspect, obj_export, bake, mapper,   # packaged extension
+                   export_limits)
 except ImportError:                           # dev / sys.path import (live MCP)
-    import introspect, wlsave_export, scene_introspect, obj_export, bake, mapper
+    import introspect, wlsave_export, scene_introspect, obj_export, bake, mapper, export_limits
 
 
 # Blender works in metres; Wild Life (Unreal) world unit is the centimetre, so a Blender scene
@@ -315,6 +316,173 @@ def _thumbnail_path(context):
     return os.path.abspath(bpy.path.abspath(raw))
 
 
+# ── Export guardrails: preferences access ───────────────────────────────────
+
+def _addon_prefs(context):
+    """This add-on's AddonPreferences, or None if unavailable (degrade to defaults)."""
+    try:
+        return context.preferences.addons[__package__].preferences
+    except (KeyError, AttributeError):
+        return None
+
+
+def _thresholds(prefs):
+    """export_limits.evaluate thresholds dict from prefs (DEFAULT_THRESHOLDS if prefs is None)."""
+    if prefs is None:
+        return export_limits.DEFAULT_THRESHOLDS
+    return {
+        "faces_scene_soft": prefs.max_faces_scene_soft,
+        "faces_scene_hard": prefs.max_faces_scene_hard,
+        "faces_mesh_soft": prefs.max_faces_mesh_soft,
+        "faces_mesh_hard": prefs.max_faces_mesh_hard,
+        "objects_soft": prefs.max_objects_soft,
+        "objects_hard": prefs.max_objects_hard,
+    }
+
+
+def _experimental(context):
+    """Whether export guardrails are disabled (Experimental mode). False if prefs unavailable."""
+    prefs = _addon_prefs(context)
+    return bool(prefs.experimental_mode) if prefs is not None else False
+
+
+def _budget_violations(context):
+    """Guardrail breaches for the current Scene-mode scope. [] on any error (never block on a bug)."""
+    try:
+        prefs = _addon_prefs(context)
+        experimental = bool(prefs.experimental_mode) if prefs is not None else False
+        budget = export_limits.gather_scene_budget(_scene_objects(context))
+        return export_limits.evaluate(budget, _thresholds(prefs), experimental)
+    except Exception:
+        traceback.print_exc()
+        return []
+
+
+def _fmt_int(n):
+    """Thousands-separated count, e.g. 1234567 -> '1,234,567'."""
+    return "{:,}".format(int(n))
+
+
+def _format_hard_block(violations):
+    parts = []
+    for v in violations:
+        if v["level"] != "hard":
+            continue
+        if v["resource"] == "objects":
+            parts.append("%s unique geometries (limit %s)" % (_fmt_int(v["value"]), _fmt_int(v["limit"])))
+        elif v["scope"] == "mesh":
+            parts.append("mesh '%s' %s faces (limit %s)"
+                         % (v["mesh"], _fmt_int(v["value"]), _fmt_int(v["limit"])))
+        else:
+            parts.append("%s scene faces (limit %s)" % (_fmt_int(v["value"]), _fmt_int(v["limit"])))
+    return ("Export blocked — over hard limits: " + "; ".join(parts)
+            + ". Reduce the scene, or enable Experimental mode in the add-on preferences.")
+
+
+def _format_soft_warning(violations):
+    bits = []
+    n_mesh = 0
+    for v in violations:
+        if v["level"] != "soft":
+            continue
+        if v["scope"] == "mesh":
+            n_mesh += 1
+        elif v["resource"] == "objects":
+            bits.append("%s geometries" % _fmt_int(v["value"]))
+        else:
+            bits.append("%s faces" % _fmt_int(v["value"]))
+    if n_mesh:
+        bits.append("%d heavy mesh(es)" % n_mesh)
+    return "Over recommended limits: " + ", ".join(bits) + " — the export may be heavy in-game."
+
+
+# ── Export guardrails: panel drawing ────────────────────────────────────────
+
+_BUDGET_MESH_MAX = 6          # heavy-mesh rows shown in the budget box
+_TEX_INVENTORY_MAX = 20       # rows shown in the texture-inventory sub-panel
+
+
+def _fmt_compact(n):
+    """Short magnitude: 1234567 -> '1.23M', 5120 -> '5k', 42 -> '42'."""
+    n = int(n)
+    if n >= 1_000_000:
+        return "%.2fM" % (n / 1_000_000)
+    if n >= 1_000:
+        return "%.0fk" % (n / 1_000)
+    return str(n)
+
+
+def _status_icon(level):
+    """Icon for a guardrail level: hard -> ERROR, soft -> INFO, clear -> CHECKMARK."""
+    return {"hard": 'ERROR', "soft": 'INFO'}.get(level, 'CHECKMARK')
+
+
+def _level_for(value, soft, hard):
+    return "hard" if (hard and value >= hard) else "soft" if (soft and value >= soft) else None
+
+
+def _usage_row(layout, value, soft, hard, text):
+    """One status-icon + progress-bar row (factor against the hard limit, clamped to [0,1])."""
+    row = layout.row(align=True)
+    row.label(text="", icon=_status_icon(_level_for(value, soft, hard)))
+    row.progress(factor=min(value / hard, 1.0) if hard else 0.0, type='BAR', text=text)
+
+
+def _draw_budget(layout, context):
+    """The 'Export budget' box: scene faces + geometries usage bars, heavy-mesh bars, banner."""
+    try:
+        budget = export_limits.gather_scene_budget(_scene_objects(context))
+        prefs = _addon_prefs(context)
+        experimental = bool(prefs.experimental_mode) if prefs is not None else False
+        th = _thresholds(prefs)
+    except Exception:
+        return
+    box = layout.box()
+    box.label(text="Export budget", icon='MOD_BUILD')
+    if experimental:
+        box.label(text="Experimental mode — limits disabled", icon='ERROR')
+
+    faces = budget["faces_total"]
+    _usage_row(box, faces, th["faces_scene_soft"], th["faces_scene_hard"],
+               "%s / %s faces" % (_fmt_compact(faces), _fmt_compact(th["faces_scene_hard"])))
+    geom = budget["geometries_unique"]
+    _usage_row(box, geom, th["objects_soft"], th["objects_hard"],
+               "%s / %s objects" % (_fmt_int(geom), _fmt_int(th["objects_hard"])))
+
+    msoft, mhard = th["faces_mesh_soft"], th["faces_mesh_hard"]
+    offenders = sorted(((k, v) for k, v in budget["faces_by_mesh"].items() if msoft and v >= msoft),
+                       key=lambda kv: kv[1], reverse=True)
+    if offenders:
+        box.label(text="Heavy meshes:")
+        for key, val in offenders[:_BUDGET_MESH_MAX]:
+            _usage_row(box, val, msoft, mhard, "%s  %s" % (_fmt_compact(val), key))
+        if len(offenders) > _BUDGET_MESH_MAX:
+            box.label(text="... (+%d more)" % (len(offenders) - _BUDGET_MESH_MAX))
+
+
+def _draw_texture_inventory(layout, context):
+    """Source-texture inventory, largest dimension first; marks images the 8k rule will downscale."""
+    try:
+        mats_scope = context.scene.minervha_export_mode == 'MATERIALS'
+        objects = _objects_for_scope(context) if mats_scope else _scene_objects(context)
+        inv = export_limits.gather_texture_inventory(objects)
+        experimental = _experimental(context)
+    except Exception:
+        layout.label(text="(inventory unavailable)")
+        return
+    if not inv:
+        layout.label(text="No source textures in scope.")
+        return
+    col = layout.column(align=True)
+    for name, w, h in inv[:_TEX_INVENTORY_MAX]:
+        over = max(w, h) > export_limits.MAX_TEXTURE_DIM and not experimental
+        row = col.row(align=True)
+        row.label(text="%d×%d" % (w, h), icon='TRIA_DOWN' if over else 'IMAGE_DATA')
+        row.label(text=name)
+    if len(inv) > _TEX_INVENTORY_MAX:
+        col.label(text="... (+%d more)" % (len(inv) - _TEX_INVENTORY_MAX))
+
+
 # Stale-tempdir janitor. A force-cancelled export leaves its wlsave_* working dir in TEMP (the cancel
 # hook now prevents this going forward, but historical/edge-case orphans still pile up — each bake run
 # is ~80 MB). Sweep dirs idle for this many hours at export start: long enough to never touch a live
@@ -349,6 +517,12 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     filter_glob: StringProperty(default="*.wlsave", options={'HIDDEN'})
 
     def invoke(self, context, event):
+        # Pre-flight guardrail (Scene mode): block a doomed run BEFORE opening the file browser.
+        if context.scene.minervha_export_mode == 'SCENE':
+            viol = _budget_violations(context)
+            if export_limits.has_hard(viol):
+                self.report({'ERROR'}, _format_hard_block(viol))
+                return {'CANCELLED'}
         safe = wlsave_export._sanitize_name(context.scene.minervha_wlsave_name or "", "MyMaterials")
         self.filepath = safe + ".wlsave"
         return ExportHelper.invoke(self, context, event)
@@ -386,7 +560,9 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         return {
             "prefer_jpg": bool(scene.minervha_tex_prefer_jpg),
             "jpg_quality": int(scene.minervha_tex_jpg_quality),
-            "max_res": None if mr == 'NONE' else int(mr),
+            # Hard rule: cap the longest side at 8192 px (covers source + baked), unless experimental.
+            "max_res": export_limits.clamp_max_res(
+                None if mr == 'NONE' else int(mr), _experimental(context)),
         }
 
     def _prepare_materials(self, context, name):
@@ -418,6 +594,14 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         if not norm_objects:
             self.report({'WARNING'}, "No exportable objects (meshes/empties) in scope")
             return {'CANCELLED'}
+        # Guardrails: hard breach blocks (defensive — invoke already checks, but execute() may be
+        # called directly, e.g. headless); soft breach warns but lets the export proceed.
+        viol = _budget_violations(context)
+        if export_limits.has_hard(viol):
+            self.report({'ERROR'}, _format_hard_block(viol))
+            return {'CANCELLED'}
+        if viol:
+            self.report({'WARNING'}, _format_soft_warning(viol))
         # 'COLLECTION' -> level "" (portable); a fixed map name -> that exact level string.
         target = context.scene.minervha_export_target
         level = "" if target == 'COLLECTION' else target
@@ -796,11 +980,7 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
             pass
 
         if scene_mode:
-            note = layout.box()
-            note.label(text="Scene export limits:", icon='INFO')
-            note.label(text="• meshes need UVs")
-            note.label(text="• procedural textures: enable Bake below")
-            note.label(text="• verify transforms in-game")
+            _draw_budget(layout, context)
 
         tex = layout.box()
         tex.label(text="Textures", icon='TEXTURE')
@@ -858,8 +1038,54 @@ class MINERVHA_PT_log(bpy.types.Panel):
             col.label(text="... (%d more lines — open the full log)" % (len(lines) - _LOG_PANEL_MAX_LINES))
 
 
-_classes = (MINERVHA_OT_export_wlsave, MINERVHA_OT_capture_thumbnail, MINERVHA_OT_open_log,
-            MINERVHA_PT_exporter, MINERVHA_PT_log)
+class MINERVHA_PT_texture_inventory(bpy.types.Panel):
+    bl_label = "Texture inventory"
+    bl_idname = "MINERVHA_PT_texture_inventory"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Minervha"
+    bl_parent_id = "MINERVHA_PT_exporter"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        _draw_texture_inventory(self.layout, context)
+
+
+class MINERVHA_AddonPreferences(bpy.types.AddonPreferences):
+    """Configurable export guardrail thresholds + the Experimental override. Global (per-add-on)."""
+    bl_idname = __package__
+
+    experimental_mode: BoolProperty(
+        name="Experimental mode (disable export limits)", default=False,
+        description="Disable ALL export guardrails: no face/object blocking and no 8192 px "
+                    "texture clamp. For power users — exports may crash the game or be too heavy")
+    max_faces_scene_soft: IntProperty(name="Scene faces — warn at", default=500_000, min=0)
+    max_faces_scene_hard: IntProperty(name="Scene faces — block at", default=2_000_000, min=0)
+    max_faces_mesh_soft: IntProperty(name="Per-mesh faces — warn at", default=100_000, min=0)
+    max_faces_mesh_hard: IntProperty(name="Per-mesh faces — block at", default=500_000, min=0)
+    max_objects_soft: IntProperty(name="Unique geometries — warn at", default=3_200, min=0)
+    max_objects_hard: IntProperty(name="Unique geometries — block at", default=4_000, min=0)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "experimental_mode")
+        col = layout.column(align=True)
+        col.enabled = not self.experimental_mode
+        for label, soft, hard in (
+                ("Scene faces:", "max_faces_scene_soft", "max_faces_scene_hard"),
+                ("Per-mesh faces:", "max_faces_mesh_soft", "max_faces_mesh_hard"),
+                ("Unique geometries:", "max_objects_soft", "max_objects_hard")):
+            row = col.row(align=True)
+            row.label(text=label)
+            row.prop(self, soft, text="Warn")
+            row.prop(self, hard, text="Block")
+        layout.label(text="Texture longest side is always capped at %d px (unless experimental)."
+                     % export_limits.MAX_TEXTURE_DIM, icon='INFO')
+
+
+_classes = (MINERVHA_AddonPreferences,
+            MINERVHA_OT_export_wlsave, MINERVHA_OT_capture_thumbnail, MINERVHA_OT_open_log,
+            MINERVHA_PT_exporter, MINERVHA_PT_log, MINERVHA_PT_texture_inventory)
 
 
 def register():
@@ -879,7 +1105,7 @@ def register():
         name="Max Resolution", items=MAX_RES_ITEMS, default='NONE',
         description="Downscale textures whose longest side exceeds this size (keeps aspect ratio)")
     bpy.types.Scene.minervha_bake = BoolProperty(
-        name="Bake procedural / complex shading", default=False,
+        name="Bake procedural / complex shading", default=True,
         description="Scene mode: bake the channels flagged as bakeCandidates (procedural, "
                     "multi-texture, divergent-UV) onto a UV-bearing mesh, into flat PBR textures. "
                     "Uses Cycles; only objects that already have UVs are baked")
