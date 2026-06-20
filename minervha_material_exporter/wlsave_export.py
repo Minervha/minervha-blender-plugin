@@ -363,18 +363,19 @@ def _new_report(name, name_original, dest_path):
     }
 
 
-def _build_material_entries(norms, name, report, tmpdir, tex_opts=None):
+def _build_material_entries(norms, name, report, tmpdir, tex_opts=None, surface_type="SurfaceType_Default"):
     """Synchronous wrapper over `_iter_build_material_entries` (kept for direct callers/tests)."""
-    return _drain(_iter_build_material_entries(norms, name, report, tmpdir, tex_opts))
+    return _drain(_iter_build_material_entries(norms, name, report, tmpdir, tex_opts, surface_type))
 
 
-def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None):
+def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, surface_type="SurfaceType_Default"):
     """Map -> sanitize+dedup+namespace material names -> gather textures. Mutates `report`.
 
     Material names are namespaced "<name>/<final>" (both export modes); a prop's
     CustomMaterial{i} references these exact strings. The "/" is legal in the `name`
     field (an internal reference, not a filename). `tex_opts` (or None) drives the texture
-    pre-pass: {prefer_jpg, jpg_quality, max_res}. Returns (entries, tex_bytes,
+    pre-pass: {prefer_jpg, jpg_quality, max_res}. `surface_type` is the WL EPhysicalSurface
+    name written to every material's `surfaceType` (one scene-wide choice). Returns (entries, tex_bytes,
     material_names) where material_names maps the original Blender material name ->
     its final namespaced customMaterials name.
 
@@ -416,7 +417,7 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None):
     for mi, norm in enumerate(norms, 1):
         if mi % 128 == 0:
             yield ("map", mi, n_norms)
-        m = mapper.map_material(norm)
+        m = mapper.map_material(norm, surface_type)
         if not m:
             report["skipped"].append(norm.get("name"))
             continue
@@ -508,21 +509,24 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None):
     return entries, tex_bytes, material_names
 
 
-def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thumbnail=None):
+def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thumbnail=None,
+                 surface_type="SurfaceType_Default"):
     """Build `dest_path` (.wlsave) from NormalizedMaterial[] `norms` as collection `name`.
 
     Materials-only bundle. Collection name, material names and texture basenames are
     sanitized to the game's filename charset (see _sanitize_name); material names are
     additionally namespaced "<Collection>/<Mat>". `tex_opts` (or None) drives the texture
-    pre-pass: {prefer_jpg, jpg_quality, max_res}. `thumbnail` (or None) is a path to an image
+    pre-pass: {prefer_jpg, jpg_quality, max_res}. `surface_type` is the WL EPhysicalSurface
+    name written to every material's `surfaceType`. `thumbnail` (or None) is a path to an image
     file bundled as the save's icon `<Name>/<Name>.png` (set `bHasDedicatedIcon`). Returns a
     report dict: name, nameOriginal, created[], renamed[], skipped[], texturesCopied[],
     texturesReExported[], texturesMissing[], texturesRenamed[], thumbnail.
     """
-    return _drain(_iter_build_wlsave(norms, name, dest_path, skeleton_path, tex_opts, thumbnail))
+    return _drain(_iter_build_wlsave(norms, name, dest_path, skeleton_path, tex_opts, thumbnail, surface_type))
 
 
-def _iter_build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thumbnail=None):
+def _iter_build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thumbnail=None,
+                       surface_type="SurfaceType_Default"):
     """Generator form of `build_wlsave` — yields progress, returns the report. Owns its tmpdir
     in a `try/finally`, so `gen.close()` on a cancelled modal run still cleans it up."""
     name_original = name
@@ -532,7 +536,8 @@ def _iter_build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None
 
     tmpdir = tempfile.mkdtemp(prefix="wlsave_tex_")
     try:
-        entries, tex_bytes, _ = yield from _iter_build_material_entries(norms, name, report, tmpdir, tex_opts)
+        entries, tex_bytes, _ = yield from _iter_build_material_entries(
+            norms, name, report, tmpdir, tex_opts, surface_type)
         icon_bytes = _prepare_icon(thumbnail)
         skel["level"] = ""
         skel["customMaterials"] = entries
@@ -548,7 +553,8 @@ def _iter_build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None
 
 def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
                        position_scale=1.0, level="", tex_opts=None, material_baker=None,
-                       thumbnail=None, master_group=False, enable_collision=False):
+                       thumbnail=None, master_group=False, enable_collision=False,
+                       surface_type="SurfaceType_Default"):
     """Build a full-scene `.wlsave`: customMaterials + props (UserMesh/Group) + Models/ OBJs.
 
     `norms`        — NormalizedMaterial[] for the materials used by the in-scope objects.
@@ -576,6 +582,8 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                      named after the save (`prop_mapper.master_group`), so the in-game scene has a
                      single top node. Identity transform keeps every child's placement.
     `enable_collision` — drive every UserMesh's `boolSettings.EnableCollision` (one scene-wide toggle).
+    `surface_type` — the WL EPhysicalSurface name written to every material's `surfaceType` (one
+                     scene-wide choice; e.g. "SurfaceType3"=Stone, "SurfaceType2"=Sand).
 
     One OBJ per unique mesh datablock (instances reuse the same MeshPath). Material names are
     namespaced; each prop's CustomMaterial{i} references them by that exact name. Returns the
@@ -585,12 +593,13 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
     """
     return _drain(_iter_build_scene_wlsave(
         norms, norm_objects, name, dest_path, obj_exporter, skeleton_path, position_scale, level,
-        tex_opts, material_baker, thumbnail, master_group, enable_collision))
+        tex_opts, material_baker, thumbnail, master_group, enable_collision, surface_type))
 
 
 def _iter_build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skeleton_path=None,
                              position_scale=1.0, level="", tex_opts=None, material_baker=None,
-                             thumbnail=None, master_group=False, enable_collision=False):
+                             thumbnail=None, master_group=False, enable_collision=False,
+                             surface_type="SurfaceType_Default"):
     """Generator form of `build_scene_wlsave` — yields ("bake"/"textures"/"map"/"read"/"meshes"/
     "props"/"zip", done, total) and returns the report. Owns its tmpdir in a try/finally so a
     cancelled modal run (`gen.close()`) still cleans up. `material_baker` may be a plain callable
@@ -627,7 +636,7 @@ def _iter_build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter,
             report["bakeFailed"] = [{"material": n.get("name"), "error": n.get("bakeFailed")}
                                     for n in norms if n.get("bakeFailed")]
         entries, tex_bytes, material_names = yield from _iter_build_material_entries(
-            norms, name, report, tmpdir, tex_opts)
+            norms, name, report, tmpdir, tex_opts, surface_type)
 
         # One OBJ per unique mesh datablock (instances reuse it). This loop is the export's long
         # pole (one wm.obj_export per datablock) — yield per datablock so a modal driver stays

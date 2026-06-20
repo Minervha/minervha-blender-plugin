@@ -145,6 +145,39 @@ BAKE_RES_ITEMS = [
 ]
 
 
+# WL physical surface type (EPhysicalSurface). The identifier IS the verbatim string written to
+# every material's `surfaceType`; the label is the game's friendly name (from the cooked
+# +PhysicalSurfaces config). One scene-wide choice for the whole export. SurfaceType25..62 exist
+# in the enum but the game assigns them no name, so they're omitted.
+SURFACE_TYPE_ITEMS = [
+    ('SurfaceType_Default', "Default", "Engine default surface type"),
+    ('SurfaceType1', "Flesh", "Flesh"),
+    ('SurfaceType2', "Sand", "Sand"),
+    ('SurfaceType3', "Stone", "Stone"),
+    ('SurfaceType4', "Water", "Water"),
+    ('SurfaceType5', "Wood", "Wood"),
+    ('SurfaceType6', "Metal", "Metal"),
+    ('SurfaceType7', "Bone", "Bone"),
+    ('SurfaceType8', "Plastic", "Plastic"),
+    ('SurfaceType9', "Leather", "Leather"),
+    ('SurfaceType10', "Fabric", "Fabric"),
+    ('SurfaceType11', "Dirt", "Dirt"),
+    ('SurfaceType12', "Glass", "Glass"),
+    ('SurfaceType13', "Asphalt", "Asphalt"),
+    ('SurfaceType14', "Mud", "Mud"),
+    ('SurfaceType15', "Gravel", "Gravel"),
+    ('SurfaceType16', "Ceramic", "Ceramic"),
+    ('SurfaceType17', "CarbonFibre", "CarbonFibre"),
+    ('SurfaceType18', "Paper", "Paper"),
+    ('SurfaceType19', "Brick", "Brick"),
+    ('SurfaceType20', "Snow", "Snow"),
+    ('SurfaceType21', "Oil", "Oil"),
+    ('SurfaceType22', "Bark", "Bark"),
+    ('SurfaceType23', "Concrete", "Concrete"),
+    ('SurfaceType24', "Chitin", "Chitin"),
+]
+
+
 # WL channel -> the Blender Principled slot a baked texture should occupy.
 _BAKE_CH_SLOT = {"diffuse": "Base Color", "roughness": "Roughness", "metallic": "Metallic",
                  "normal": "Normal", "emissive": "Emission Color"}
@@ -600,7 +633,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         self._mode = 'materials'
         self._gen = wlsave_export._iter_build_wlsave(
             norms, name, self.filepath, tex_opts=self._tex_opts(context),
-            thumbnail=_thumbnail_path(context))
+            thumbnail=_thumbnail_path(context), surface_type=context.scene.minervha_surface_type)
         self._unused = introspect.unused_materials(
             context.scene.minervha_scope, _objects_for_scope(context))
         return None
@@ -648,7 +681,8 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             position_scale=world_scale, level=level, tex_opts=self._tex_opts(context),
             material_baker=baker, thumbnail=_thumbnail_path(context),
             master_group=bool(context.scene.minervha_master_group),
-            enable_collision=bool(context.scene.minervha_enable_collision))
+            enable_collision=bool(context.scene.minervha_enable_collision),
+            surface_type=context.scene.minervha_surface_type)
         self._unused = introspect.unused_materials('COLLECTION', objs)
         return None
 
@@ -1029,6 +1063,7 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         box = layout.box()
         box.label(text="Wild Life collection (.wlsave)")
         box.prop(scene, "minervha_wlsave_name", text="Name")
+        box.prop(scene, "minervha_surface_type", text="Surface")
         row = box.row(align=True)
         row.prop(scene, "minervha_thumbnail_path", text="Thumbnail")
         row.operator("minervha.capture_thumbnail", text="", icon='RENDER_STILL')
@@ -1143,6 +1178,10 @@ def register():
         name="Thumbnail", default="", subtype='FILE_PATH',
         description="Image bundled as the save's thumbnail (<Name>/<Name>.png). Any Blender-readable "
                     "image; re-encoded to PNG at 512 px. Use the camera button to capture the 3D viewport")
+    bpy.types.Scene.minervha_surface_type = EnumProperty(
+        name="Surface", items=SURFACE_TYPE_ITEMS, default='SurfaceType3',
+        description="Wild Life physical surface type written to every exported material. The game "
+                    "defaults new materials to Sand; pick the surface that matches your export")
     for cls in _classes:
         bpy.utils.register_class(cls)
     _load_last_log()        # show the previous run's log in the panel after a restart
@@ -1166,6 +1205,7 @@ def unregister():
                  "minervha_collection", "minervha_wlsave_name",
                  "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res",
                  "minervha_bake", "minervha_bake_res", "minervha_flip_green",
-                 "minervha_master_group", "minervha_enable_collision", "minervha_thumbnail_path"):
+                 "minervha_master_group", "minervha_enable_collision", "minervha_thumbnail_path",
+                 "minervha_surface_type"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

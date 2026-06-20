@@ -130,6 +130,14 @@ Collisions** (Scene mode): one scene-wide toggle drives every UserMesh's `boolSe
 `ui.py` adds the three props (+ a "Scene options" box and a Thumbnail row with a capture button) and reports
 each in the popup. Plan: [`../docs/plans/features/export-options/plan.md`](../docs/plans/features/export-options/plan.md).
 
+**Surface type (both modes).** One scene-wide choice for every material's `surfaceType` (Unreal
+`EPhysicalSurface`, serialized by raw name e.g. `SurfaceType3`). `ui.py` adds `minervha_surface_type`
+(`SURFACE_TYPE_ITEMS`: Default + the 24 game-named types Flesh/Sand/Stone…Chitin, from the cooked
+`+PhysicalSurfaces` config; default **Stone**) shown under the **Name** field, and passes it to both build
+calls. `mapper.map_material(norm, surface_type="SurfaceType_Default")` writes it; the param default keeps the
+golden snapshot (`SurfaceType_Default`) green while the UI default is Stone. Threaded through
+`build_wlsave`/`build_scene_wlsave` → `_iter_build_material_entries` alongside `tex_opts`.
+
 **Responsive export + progress + last-export log (validated live Blender 5.1.2).** The export ran
 synchronously in `execute()` — on a 14740-object / 7682-mesh-datablock / 1421-image scene that froze Blender
 ("Not Responding") for minutes with no progress (bpy is single-threaded, so `wm.obj_export` / `Image.save` /

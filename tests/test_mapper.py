@@ -124,6 +124,27 @@ def run():
     print(f"GOLDEN OK — {len(fixtures)} fixtures match the mapper.py snapshot")
 
 
+def run_surface_type():
+    """The `surface_type` param drives entry['surfaceType']; default stays SurfaceType_Default."""
+    fixtures = json.load(open(os.path.join(HERE, "fixtures", "normalized_materials.json"), encoding="utf-8"))
+    norm = next(m for m in fixtures if mapper.map_material(m) is not None)
+    fails = []
+    default = mapper.map_material(norm)["entry"]["surfaceType"]
+    if default != "SurfaceType_Default":
+        fails.append(f"default surfaceType={default!r} expected 'SurfaceType_Default'")
+    for st in ("SurfaceType3", "SurfaceType2", "SurfaceType_Default"):
+        got = mapper.map_material(norm, surface_type=st)["entry"]["surfaceType"]
+        if got != st:
+            fails.append(f"surface_type={st!r} -> entry {got!r}")
+    if fails:
+        print(f"SURFACE_TYPE FAILED — {len(fails)} issue(s):")
+        for m in fails:
+            print(f"  {m}")
+        sys.exit(1)
+    print("SURFACE_TYPE OK — surface_type param drives entry['surfaceType']")
+
+
 if __name__ == "__main__":
     run()
     run_semantic()
+    run_surface_type()

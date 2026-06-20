@@ -82,7 +82,7 @@ CHANNEL_TO_FIELD = {
 }
 
 
-def map_material(norm):
+def map_material(norm, surface_type="SurfaceType_Default"):
     if not norm or norm.get("skipped"):
         return None
 
@@ -354,7 +354,7 @@ def map_material(norm):
         "bIsTwoSided": two_sided,
         "bFlipGreenChannel": bool(norm.get("flipGreen", True)),
         "textureRandomness": 0,
-        "surfaceType": "SurfaceType_Default",
+        "surfaceType": surface_type,
         "textureMovement": {"x": 0, "y": 0, "z": 0},
         "refraction": refraction,
     }
