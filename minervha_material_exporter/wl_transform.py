@@ -41,10 +41,14 @@ WL_BASIS = {
               (0, 1, 0),
               (0, 0, -1)),
     # Game euler rotator (Unreal FRotator): roll about X, pitch about Y, yaw about Z (the up axis —
-    # corpus-confirmed). Order/signs are the seed; the rig pins the signs.
+    # corpus-confirmed). Signs PINNED in-game via the rig (CalibLeaf, 3 single-axis probes): Unreal's
+    # FRotator extraction is pitch=asin(M20), yaw=atan2(M10,M00), roll=atan2(-M21,M22), which relative
+    # to this module's XYZ-euler extraction (ex=atan2(M21,M22), ey=atan2(-M20,cy), ez=atan2(M10,M00))
+    # is exactly: roll=-ex, pitch=-ey, yaw=+ez. So roll/pitch flip sign, yaw stays. (Seed was all +1 —
+    # only yaw-about-Z scenes looked right; roll/pitch-rotated props came out mirrored -> scene exploded.)
     "rotator_axis": {"roll": "x", "pitch": "y", "yaw": "z"},
     "rotator_order": "XYZ",
-    "rotator_sign": {"roll": 1, "pitch": 1, "yaw": 1},
+    "rotator_sign": {"roll": -1, "pitch": -1, "yaw": 1},
 }
 
 _IDENTITY3 = ((1, 0, 0), (0, 1, 0), (0, 0, 1))

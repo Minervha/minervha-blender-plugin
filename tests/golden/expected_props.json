@@ -360,7 +360,7 @@
     "rotation": {
       "pitch": 0.0,
       "yaw": 0.0,
-      "roll": -45.0
+      "roll": 45.0
     },
     "scale": {
       "x": 0.5,

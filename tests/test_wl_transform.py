@@ -96,6 +96,21 @@ def test_seed_rotation_about_blender_z():
     assert t["rotation"] == {"pitch": 0.0, "yaw": -90.0, "roll": 0.0}
 
 
+def test_seed_rotation_about_blender_x():
+    # +90° Blender-X -> game roll +90 (rotator_sign roll = -1, PINNED in-game via the CalibLeaf rig:
+    # Unreal FRotator roll = atan2(-M21, M22), opposite to this module's bare XYZ-euler extraction).
+    t = T.object_transform((0, 0, 0), (math.pi / 2, 0, 0), "XYZ", (1, 1, 1))
+    assert t["rotation"] == {"pitch": 0.0, "yaw": 0.0, "roll": 90.0}
+
+
+def test_seed_rotation_about_blender_y():
+    # +90° Blender-Y -> game pitch -90 (rotator_sign pitch = -1, PINNED via the rig: Unreal FRotator
+    # pitch = asin(M20), opposite sign to this module's bare extraction). Seed +1 mirrored roll/pitch
+    # and exploded any non-yaw-rotated scene.
+    t = T.object_transform((0, 0, 0), (0, math.pi / 2, 0), "XYZ", (1, 1, 1))
+    assert t["rotation"] == {"pitch": -90.0, "yaw": 0.0, "roll": 0.0}
+
+
 def test_geom_constraint():
     Bg4 = T.geom_matrix()
     Bg = tuple(tuple(Bg4[r][c] for c in range(3)) for r in range(3))
