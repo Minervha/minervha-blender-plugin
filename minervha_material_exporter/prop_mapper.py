@@ -85,7 +85,12 @@ def _group_events():
 
 
 def _common(norm, transform):
-    """Fields shared by UserMesh and Group, in canonical key order."""
+    """Fields shared by UserMesh and Group, in canonical key order.
+
+    `guid_key` (optional) overrides the guid source for nodes whose `label` must NOT seed the
+    guid — a collection Group's label is the collection name (shown in-game) but its guid is
+    derived from a namespaced key so it can't collide with an object of the same name. Absent
+    (every real object) -> guid from `name`, exactly as before (golden stable)."""
     parent = norm.get("parent_name")
     return {
         "label": norm.get("name"),
@@ -93,7 +98,7 @@ def _common(norm, transform):
         "position": transform["position"],
         "rotation": transform["rotation"],
         "scale": transform["scale"],
-        "guid": make_guid(norm.get("name")),
+        "guid": make_guid(norm.get("guid_key") or norm.get("name")),
         "parent": make_guid(parent) if parent else _ROOT_GUID,
         "childIndex": int(norm.get("child_index") or 0),
         "attachment": "None",

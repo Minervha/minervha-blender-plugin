@@ -280,6 +280,41 @@ def test_materials_only_path_still_namespaces():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_collection_group_parent_resolves_end_to_end():
+    # A collection Group (namespaced guid_key) + a mesh re-homed under it: the whole prop tree
+    # must resolve, and the group's guid must come from the key, not its label.
+    key = "\x00minervha-collection\x00Furniture"
+    ident = {"location": [0, 0, 0], "rotation_euler": [0, 0, 0], "rotation_order": "XYZ", "scale": [1, 1, 1]}
+    objs = [
+        {"name": "Furniture", "kind": "group", "mesh_key": None, "guid_key": key,
+         "parent_name": None, "child_index": 0, "visible": True, "transform": ident,
+         "material_slots": [], "validation": {"has_uv": False, "procedural_materials": [], "risky_transform": None}},
+        {"name": "Chair", "kind": "mesh", "mesh_key": "ChairMesh", "parent_name": key,
+         "child_index": 0, "visible": True,
+         "transform": {**ident, "location": [1, 0, 0]}, "material_slots": ["WoodMat"],
+         "validation": {"has_uv": True, "procedural_materials": [], "risky_transform": None}},
+    ]
+    norms = _material_norms(objs)
+    tmp = tempfile.mkdtemp(prefix="scene_coll_")
+    try:
+        dest = os.path.join(tmp, "out.wlsave")
+        wlsave_export.build_scene_wlsave(norms, objs, NAME, dest, _fake_obj_exporter,
+                                         skeleton_path=os.path.join(PKG, "skeleton.json"))
+        with zipfile.ZipFile(dest) as z:
+            data = json.loads(z.read(f"{NAME}/{NAME}.json"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    props = {p["label"]: p for p in data["props"]}
+    grp, chair = props["Furniture"], props["Chair"]
+    assert grp["iD"] == "Group"
+    assert grp["guid"] == prop_mapper.make_guid(key)           # guid from key, not label
+    assert grp["guid"] != prop_mapper.make_guid("Furniture")
+    assert chair["parent"] == grp["guid"]                      # child resolves to the group
+    guids = {p["guid"] for p in data["props"]}
+    root = prop_mapper.root_guid()
+    assert all(p["parent"] == root or p["parent"] in guids for p in data["props"])
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fails = []

@@ -133,7 +133,11 @@ def normalize_object(obj, in_scope_names):
 
 
 def _assign_child_indices(norms):
-    """Deterministic childIndex: per parent (None = roots), sort siblings by name."""
+    """Deterministic childIndex: per parent (None = roots), sort siblings by name.
+
+    Works on a mixed list (objects + collection Groups): an object re-homed under a collection
+    and a sub-collection of that collection share the same parent_name (the collection's
+    guid_key), so they are siblings under one deterministic name-sort."""
     by_parent = {}
     for n in norms:
         by_parent.setdefault(n["parent_name"], []).append(n)
@@ -142,13 +146,169 @@ def _assign_child_indices(norms):
             n["child_index"] = i
 
 
-def collect(scope="SCENE", objects=None):
-    """Return NormalizedObject[] for the scope (UI passes the resolved object list)."""
-    objs = collect_objects(scope, objects)
+# ── Collection hierarchy ────────────────────────────────────────────────────
+# A Blender Collection -> an identity-transform Group prop, nested under its parent
+# collection's Group; objects with no in-scope object-parent are re-homed under the Group of the
+# collection that directly contains them. The guid is seeded from a namespaced key (mirrors
+# prop_mapper.master_group) so a collection never collides with an object of the same name.
+_COLLECTION_GUID_PREFIX = "\x00minervha-collection\x00"
+
+
+def _collection_guid_key(name):
+    return _COLLECTION_GUID_PREFIX + str(name)
+
+
+def _identity_transform():
+    return {"location": (0.0, 0.0, 0.0), "rotation_euler": (0.0, 0.0, 0.0),
+            "rotation_order": "XYZ", "scale": (1.0, 1.0, 1.0)}
+
+
+def build_collection_groups(object_norms, tree, emit_root_as_group):
+    """Pure (bpy-free): collection `tree` + object norms -> (group_norms, reparent).
+
+    `tree`: plain nested dict {"name", "objects": [obj names], "children": [tree, ...]}, already
+    exclusion-filtered (excluded children omitted). `object_norms`: NormalizedObject[] whose
+    parent_name is the in-scope object-parent or None. `emit_root_as_group`: emit the root
+    collection itself as a Group (COLLECTION scope) vs treat it as the implicit root (SCENE/SELECTED).
+
+    Returns:
+      group_norms — NormalizedObject[] (kind "group", identity transform, `guid_key`, parent_name
+        = parent kept-collection guid_key or None) for the collections kept after pruning.
+      reparent — {obj_name -> new parent_name (a collection guid_key, or None for the implicit
+        root's direct objects)} for the objects re-homed under a collection.
+
+    An object is claimed by the FIRST collection (DFS pre-order, children name-sorted) that
+    directly lists it, has it in scope, hasn't claimed it yet, and where it is a would-be-root
+    (parent_name None — an object already parented to an in-scope object keeps that parent). A
+    collection is kept iff it claims >=1 object or a kept descendant survives (empty branches pruned)."""
+    in_scope = {n["name"] for n in object_norms}
+    by_name = {n["name"]: n for n in object_norms}
+    claimed = set()
+    group_norms = []
+    reparent = {}
+
+    def walk(node, parent_key, is_root):
+        key = _collection_guid_key(node.get("name"))
+        emit_self = emit_root_as_group or not is_root
+        home_key = key if emit_self else parent_key   # where this node's direct objects parent
+        mine = []
+        for obj_name in sorted(node.get("objects") or []):
+            if obj_name in in_scope and obj_name not in claimed:
+                n = by_name.get(obj_name)
+                if n is not None and n.get("parent_name") is None:
+                    claimed.add(obj_name)
+                    mine.append(obj_name)
+        kept_children = False
+        for child in sorted(node.get("children") or [], key=lambda c: c.get("name") or ""):
+            kept_children = walk(child, home_key, False) or kept_children
+        if not (mine or kept_children):
+            return False                              # prune: nothing exportable in this subtree
+        for obj_name in mine:
+            reparent[obj_name] = home_key
+        if emit_self:
+            group_norms.append({
+                "name": node.get("name"), "kind": "group", "mesh_key": None,
+                "guid_key": key, "parent_name": parent_key, "child_index": 0,
+                "visible": True, "transform": _identity_transform(), "material_slots": [],
+                "validation": {"has_uv": False, "procedural_materials": [], "risky_transform": None},
+            })
+        return True
+
+    walk(tree, None, True)
+    return group_norms, reparent
+
+
+def objects_in_tree(tree):
+    """Set of every object name anywhere in a (non-excluded) collection `tree` dict."""
+    out = set(tree.get("objects") or [])
+    for child in tree.get("children") or []:
+        out |= objects_in_tree(child)
+    return out
+
+
+def _read_layer_tree(layer_coll):
+    """LayerCollection -> plain tree dict, skipping view-layer-EXCLUDED children. The given root's
+    own `.exclude` is ignored (an explicitly chosen root collection is always honored). Reads
+    DIRECT `collection.objects` only (direct membership, not recursive)."""
+    coll = layer_coll.collection
+    node = {"name": coll.name, "objects": [o.name for o in coll.objects], "children": []}
+    for child in layer_coll.children:
+        if getattr(child, "exclude", False):
+            continue
+        node["children"].append(_read_layer_tree(child))
+    return node
+
+
+def _read_collection_tree(coll):
+    """Collection -> plain tree dict with NO exclusion info (fallback when the chosen collection
+    isn't present in the active view layer's LayerCollection tree)."""
+    return {"name": coll.name, "objects": [o.name for o in coll.objects],
+            "children": [_read_collection_tree(c) for c in coll.children]}
+
+
+def _find_layer_collection(layer_coll, target):
+    """Depth-first search for the LayerCollection wrapping `target` collection, or None."""
+    if layer_coll.collection == target:
+        return layer_coll
+    for child in layer_coll.children:
+        found = _find_layer_collection(child, target)
+        if found is not None:
+            return found
+    return None
+
+
+def _collection_tree(scope, root_collection):
+    """Plain collection tree for the scope (bpy). `root_collection` (COLLECTION scope) is the
+    emitted root, honored even if excluded; else the scene master collection (SCENE/SELECTED) is
+    the implicit root."""
+    master_lc = bpy.context.view_layer.layer_collection
+    if root_collection is not None:
+        lc = _find_layer_collection(master_lc, root_collection)
+        return _read_layer_tree(lc) if lc is not None else _read_collection_tree(root_collection)
+    return _read_layer_tree(master_lc)
+
+
+def collect(scope="SCENE", objects=None, root_collection=None, collection_hierarchy=False):
+    """Return NormalizedObject[] for the scope (UI passes the resolved object list).
+
+    With `collection_hierarchy` True, every non-excluded Blender Collection in scope is also
+    emitted as an identity-transform Group and objects with no in-scope object-parent are re-homed
+    under the Group of the collection that directly contains them (build_collection_groups).
+    `root_collection` (COLLECTION scope) is the emitted root group, honored even if excluded;
+    SCENE/SELECTED use the scene master collection as the implicit root. With it False (or without
+    bpy) the behaviour is unchanged."""
+    if not collection_hierarchy or bpy is None:
+        objs = collect_objects(scope, objects)
+        in_scope = {o.name for o in objs}
+        norms = [normalize_object(o, in_scope) for o in objs]
+        _assign_child_indices(norms)
+        return norms
+
+    tree = _collection_tree(scope, root_collection)
+    reachable = objects_in_tree(tree)               # drop excluded-only objects (props ~ exclusion)
+    objs = [o for o in collect_objects(scope, objects) if o.name in reachable]
     in_scope = {o.name for o in objs}
-    norms = [normalize_object(o, in_scope) for o in objs]
+    object_norms = [normalize_object(o, in_scope) for o in objs]
+    group_norms, reparent = build_collection_groups(
+        object_norms, tree, emit_root_as_group=root_collection is not None)
+    for n in object_norms:
+        if n["name"] in reparent:
+            n["parent_name"] = reparent[n["name"]]
+    norms = object_norms + group_norms
     _assign_child_indices(norms)
     return norms
+
+
+def exportable_objects(scope, objects, root_collection=None, collection_hierarchy=False):
+    """The object list to feed materials + obj_export so they stay consistent with the props.
+    With `collection_hierarchy` True, view-layer-excluded objects are dropped (the props don't
+    reference them, so their materials/OBJs shouldn't ship). False (or without bpy) -> `objects`
+    unchanged."""
+    if not collection_hierarchy or bpy is None:
+        return objects
+    reachable = objects_in_tree(_collection_tree(scope, root_collection))
+    base = objects if objects is not None else list(bpy.context.scene.objects)
+    return [o for o in base if o.name in reachable]
 
 
 def build_mesh_object_map(objects):

@@ -96,6 +96,7 @@ def _options_label(context):
              "flipGreen " + ("on" if s.minervha_flip_green else "off")]
     if s.minervha_export_mode == 'SCENE':
         parts += ["bake " + ("on" if s.minervha_bake else "off"),
+                  "collections " + ("on" if s.minervha_collection_hierarchy else "off"),
                   "master group " + ("on" if s.minervha_master_group else "off"),
                   "collisions " + ("on" if s.minervha_enable_collision else "off")]
     parts.append("thumbnail " + ("yes" if _thumbnail_path(context) else "no"))
@@ -641,13 +642,25 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     def _prepare_scene(self, context, name):
         """Synchronous setup for a scene export; builds the step generator. Returns
         {'CANCELLED'} (with a warning) or None when prepared."""
+        scope = context.scene.minervha_scope
+        hierarchy = bool(context.scene.minervha_collection_hierarchy)
+        # COLLECTION scope -> the chosen collection is the emitted root group; SCENE/SELECTED use
+        # the scene master collection as the implicit root.
+        root_coll = context.scene.minervha_collection if scope == 'COLLECTION' else None
         objs = _scene_objects(context)
         if not objs:
             self.report({'WARNING'}, "No objects in the selected scope")
             return {'CANCELLED'}
+        # One exclusion filter feeding materials + obj_export + props, so view-layer-excluded
+        # objects don't leak dead materials/OBJs into the bundle (no-op when hierarchy is off).
+        objs = scene_introspect.exportable_objects(scope, objs, root_coll, hierarchy)
+        if not objs:
+            self.report({'WARNING'}, "No objects left after excluding hidden collections")
+            return {'CANCELLED'}
         norms = _scene_materials(objs)
         _annotate_flip(context, norms)
-        norm_objects = scene_introspect.collect(context.scene.minervha_scope, objs)
+        norm_objects = scene_introspect.collect(scope, objs, root_collection=root_coll,
+                                                collection_hierarchy=hierarchy)
         if not norm_objects:
             self.report({'WARNING'}, "No exportable objects (meshes/empties) in scope")
             return {'CANCELLED'}
@@ -1056,6 +1069,7 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         if scene_mode:
             scn = layout.box()
             scn.label(text="Scene options", icon='OBJECT_DATA')
+            scn.prop(scene, "minervha_collection_hierarchy")
             scn.prop(scene, "minervha_master_group")
             scn.prop(scene, "minervha_enable_collision")
 
@@ -1166,6 +1180,12 @@ def register():
         description="Wild Life reads DirectX-convention normal maps (green channel flipped). "
                     "Leave on for OpenGL-authored normals (the Blender default); turn off if your "
                     "normal maps are already DirectX")
+    bpy.types.Scene.minervha_collection_hierarchy = BoolProperty(
+        name="Preserve collection hierarchy", default=True,
+        description="Scene mode: emit every non-excluded Blender Collection as a Wild Life group, "
+                    "nested like the outliner, and parent objects under their collection. Object "
+                    "parenting is preserved on top. Turn off for a flat object list. View-layer "
+                    "excluded collections are skipped")
     bpy.types.Scene.minervha_master_group = BoolProperty(
         name="Wrap in master group", default=False,
         description="Scene mode: parent every top-level object under one Wild Life group named after "
@@ -1205,7 +1225,8 @@ def unregister():
                  "minervha_collection", "minervha_wlsave_name",
                  "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res",
                  "minervha_bake", "minervha_bake_res", "minervha_flip_green",
-                 "minervha_master_group", "minervha_enable_collision", "minervha_thumbnail_path",
+                 "minervha_collection_hierarchy", "minervha_master_group",
+                 "minervha_enable_collision", "minervha_thumbnail_path",
                  "minervha_surface_type"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

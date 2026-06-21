@@ -8,9 +8,9 @@ Source of the Blender 4.2+ extension (this folder = build root, zipped for insta
 | `__init__.py` | `register`/`unregister` — delegates to `ui` | `bpy`, `ui` | chunk-01 / chunk-06 |
 | `skeleton.json` | Bundled collection skeleton (real header, emptied arrays) — base of the `.wlsave`. **Save format v18** (`version:18`, `luaVersion:15`) | — | chunk-01; v18 bump in [full-material-export](../docs/plans/features/full-material-export/plan.md) |
 | `mapper.py` | `NormalizedMaterial` → `customMaterials` entry. Emits the **complete v18 struct (24 fields, game key order)**. Single source of truth (the Studio `mapMaterial.js` it was ported from was removed). `textureTiling` = **reciprocal** of Blender's Mapping Scale (`_inv_scale`). **`type` decision table** (first-match-wins: Glass/Refraction/Transmission/Transparent BSDF → Transparent; linked-Alpha/Mix-Fac/Alpha-tex → Masked; constant α<0.99 → Transparent) + group-resolved `refraction` (clamp `[1,3]`, 1.45 fallback) | — (pure, no `bpy`) | chunk-04; full-material-export; [tiling-reciprocal](../docs/plans/features/tiling-reciprocal/plan.md); [material-type-fidelity](../docs/plans/features/material-type-fidelity/plan.md) |
-| `prop_mapper.py` | `NormalizedObject` → Wild Life `props[]` entry (`UserMesh`/`Group`). Pure; deterministic guids (`make_guid`), `blender_to_wl_transform` (delegates to `wl_transform`), per-slot `CustomMaterial{i+OFFSET}` material linkage. Schema certified in [`../docs/wl-prop-schema.md`](../docs/wl-prop-schema.md) | `wl_transform` (pure, no `bpy`) | [scene-export](../docs/plans/features/scene-export/plan.md) chunk-02; [coordinate-transform](../docs/plans/features/coordinate-transform/plan.md) |
+| `prop_mapper.py` | `NormalizedObject` → Wild Life `props[]` entry (`UserMesh`/`Group`). Pure; deterministic guids (`make_guid`; an optional **`guid_key`** seeds a collection Group's guid from a namespaced key so it can't collide with a same-named object, while `label` stays the real name — absent on real objects ⇒ guid from `name`, golden stable), `blender_to_wl_transform` (delegates to `wl_transform`), per-slot `CustomMaterial{i+OFFSET}` material linkage. Schema certified in [`../docs/wl-prop-schema.md`](../docs/wl-prop-schema.md) | `wl_transform` (pure, no `bpy`) | [scene-export](../docs/plans/features/scene-export/plan.md) chunk-02; [coordinate-transform](../docs/plans/features/coordinate-transform/plan.md); [collection-hierarchy](../docs/plans/features/collection-hierarchy/plan.md) |
 | `wl_transform.py` | **Single locus** of the Blender→WL coordinate convention (`WL_BASIS`): one change of basis `B` drives position (`B·p`), rotation (`B·R·Bᵀ`, extracted in the game rotator convention) and scale (axis permutation); geometry matrix `B_geom = C_objᵀ·B` (derived) + `geom_is_mirrored` (= `det(B)<0`). Reproduces Blender's euler convention exactly. THEORY SEED — calibrated in-game via the rig | — (pure, no `bpy`/numpy) | [coordinate-transform](../docs/plans/features/coordinate-transform/plan.md) chunk-01 |
-| `scene_introspect.py` | Scene → `NormalizedObject[]` (scope-aware; mesh→UserMesh, empty→Group; local transforms via matrix decompose; mesh-datablock dedup keys; hierarchy; validation: UV/procedural/risky-scale). `build_mesh_object_map` for obj_export. **Needs live validation** | `bpy` | scene-export chunk-01 |
+| `scene_introspect.py` | Scene → `NormalizedObject[]` (scope-aware; mesh→UserMesh, empty→Group; local transforms via matrix decompose; mesh-datablock dedup keys; hierarchy; validation: UV/procedural/risky-scale). `build_mesh_object_map` for obj_export. **Collection hierarchy (opt-in, default on):** `build_collection_groups` (pure core) emits each non-excluded Collection as an identity-transform Group nested like the outliner and re-homes would-be-root objects under their collection's Group (object parenting still wins); thin bpy readers walk `LayerCollection` (skip view-layer **excluded**, honor the chosen root); `exportable_objects` is the single exclusion filter feeding materials+obj_export+props. Supersedes the scene-export v1 "collections not emitted" decision. **bpy readers need live validation** | `bpy` | scene-export chunk-01; [collection-hierarchy](../docs/plans/features/collection-hierarchy/plan.md) |
 | `obj_export.py` | Export one mesh datablock to OBJ in **local space** (resets `matrix_world` during export — `wm.obj_export` bakes world transform). `make_obj_exporter` adapts it to `build_scene_wlsave`'s injected seam. **Needs live validation**. Axes co-calibrated with `prop_mapper` (calibration #2) | `bpy`, `wlsave_export` | scene-export chunk-03 |
 | `bsdf_trace.py` | Node-tracing helpers (port of the script) — used by `introspect`. Also traces **height** textures (Bump/Displacement → Material Output). Adds the **active-output-anchored surface-shader walk** (`find_active_output`, `trace_surface_shaders`, `_resolve_input`) that classifies material `type`/`refraction` through Reroute/Mix/Add/groups | `bpy` | chunk-02; full-material-export; [material-type-fidelity](../docs/plans/features/material-type-fidelity/plan.md) |
 | `introspect.py` | Scene → `NormalizedMaterial[]`, scope-aware. Reads specular, IOR, transmission, alpha, two-sided, alpha-cutoff + height textures for full v18 export. Adds **type-signal fields** (`shaderTypes`, `alphaLinked`, `transmissionLinked`/`StaticValue`, `refractiveIor`, `maskedFacMix`, `surfaceRenderMethod`, `useRaytraceRefraction`) + Glass/Refraction `Color`/`Roughness` fallback + **`perMeshDependency`** (vertex-color / object-space / geometry → flags a bake as a per-mesh approximation) + **`multiTextureChannels`** (a Principled colour input fed by ≥2 images, counted backward via `bsdf_trace.images_feeding_input` → `multi-texture` bakeCandidate, so a blended albedo isn't shipped as one wrong texture) | `bpy`, `bsdf_trace` | chunk-02; full-material-export; material-type-fidelity (validated live, Blender 5.1.2); [bake-on-placeholder](../docs/plans/features/bake-on-placeholder/plan.md) |
@@ -257,6 +257,27 @@ without Blender; live-verified on `Cinema_Theatron` (187 k faces / 1382 geometri
 1-object hard cap blocks with no file written; experimental bypasses; panel redraw clean). Plan:
 [`../docs/plans/features/export-guardrails/plan.md`](../docs/plans/features/export-guardrails/plan.md).
 
+**Collection & parenting hierarchy (opt-in, default ON — pure tests green; bpy readers pending live
+validation).** The scene export emitted a flat prop list (hierarchy = object parenting only; Collections drove
+scope but were never groups — scene-export v1 decision). Now every non-excluded Blender Collection becomes a
+nested Wild Life `Group` so the in-game outliner mirrors Blender's. The model resolves WL's single `parent`
+slot (both organizational AND transform-relative) against Blender's split (object-parenting carries the
+transform, collection membership doesn't): collection Groups are **identity transform**, so a world-placed
+object re-homed under one keeps its placement — **no transform logic changed**, the feature is pure tree
+construction. `scene_introspect.build_collection_groups` (pure, bpy-free, the tested unit) walks the collection
+`tree` DFS (children name-sorted), claims each would-be-root object (no in-scope object-parent) under the FIRST
+collection that directly holds it (object-parented objects keep their parent), **prunes** branches with nothing
+exportable, and emits identity Groups with a namespaced `guid_key`. Scope: `COLLECTION` → chosen collection is
+the emitted root group (honored even if excluded); `SCENE/FILE` → top-level collections become root groups (the
+scene master collection is the implicit root, not emitted); `SELECTED` → same walk pruned to the selection's
+branches. Thin bpy readers (`_read_layer_tree`/`_find_layer_collection`/`_collection_tree`) read the
+`LayerCollection` tree and **skip view-layer-excluded** children; `exportable_objects` applies the same
+exclusion to the object set fed to materials+obj_export so excluded objects don't leak dead materials/OBJs.
+`ui.py` adds **`minervha_collection_hierarchy`** (default True, "Preserve collection hierarchy" in Scene
+options; OFF = byte-identical to before) and wires scope/root/exclusion through `_prepare_scene`. Orthogonal to
+master group. Out of scope: collection-instance empties. Plan:
+[`../docs/plans/features/collection-hierarchy/plan.md`](../docs/plans/features/collection-hierarchy/plan.md).
+
 Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
@@ -265,8 +286,12 @@ Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` —
 golden `expected_props.json` regenerable via `_gen_golden_props.py`; + `master_group` shape and the
 `enable_collision` toggle);
 `test_scene_build.py` (`build_scene_wlsave` end-to-end with OBJ export injected — Models/props/cross-ref; +
-master-group wrapping, collision propagation, thumbnail-as-first-PNG; + `_iter_build_scene_wlsave` progress
+master-group wrapping, collision propagation, thumbnail-as-first-PNG; + a collection-Group (`guid_key`) +
+re-homed mesh resolving end-to-end; + `_iter_build_scene_wlsave` progress
 events well-formed, clean cancel via `gen.close()`, and generator↔wrapper report parity);
+`test_collection_hierarchy.py` (pure core: `build_collection_groups` across SCENE/COLLECTION scope, nesting,
+empty-branch pruning, multiple-membership first-wins, object-parent-kept, identity Groups, mixed `childIndex`;
++ `prop_mapper` `guid_key` namespacing);
 `test_thumbnail.py` (`_prepare_icon` pure path + `_write_zip` writes the icon before any texture + `bHasDedicatedIcon`);
 `test_logformat.py` (`format_export_log` — scene/materials/cancelled text, level label, timeline);
 `test_texture_collision.py` (dedup by srcPath, collision rename);
