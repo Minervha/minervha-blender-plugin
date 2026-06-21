@@ -39,7 +39,9 @@ or *Old Wild Life Map*. The Studio installs a collection under `Collections/` an
 `MySaves/<map>/`.
 
 **Textures** (the *Textures* box): by default opaque textures are re-encoded to **JPG** at an adjustable
-quality (smaller files), while textures with an alpha channel always stay **PNG**. An optional
+quality (smaller files), while textures with an alpha channel always stay **PNG**. **Normal maps also stay
+PNG** by default (*Keep normal maps as PNG*) — JPG's lossy compression mangles tangent-space normals into
+blocky shading; turn it off to let normals be JPG-encoded like any opaque texture. An optional
 **Max resolution** cap downscales anything larger (aspect ratio kept). Packed/generated images and other
 formats (`.tga`, `.exr`…) are re-exported automatically. Turn *Prefer JPG over PNG* off to keep on-disk
 PNG/JPG as-is and re-export the rest to PNG.

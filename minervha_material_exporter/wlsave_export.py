@@ -12,8 +12,9 @@ the export options are copied as-is; packed/generated images, other on-disk form
 (.tga, .exr…), and anything needing a format/resolution change are re-exported via
 Blender in a pre-pass, so the mapper then sees them as ordinary path-kind textures.
 Optional `tex_opts` drive that pre-pass: prefer JPG for opaque textures (alpha-bearing
-images always stay PNG), a JPG quality, and a max-resolution downscale cap. UDIM/missing
-stay unresolved (material created without that texture).
+images always stay PNG, and normal maps stay PNG too when `keep_normal_png` is set), a JPG
+quality, and a max-resolution downscale cap. UDIM/missing stay unresolved (material created
+without that texture).
 
 Runs Blender-side (needs bpy for re-export); the on-disk copy path also works without.
 """
@@ -233,12 +234,15 @@ def _drain(gen):
         return e.value
 
 
-def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=None):
+def _process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=None,
+                      keep_normal_png=False):
     """Synchronous wrapper over `_iter_process_textures` (kept for direct callers/tests)."""
-    return _drain(_iter_process_textures(norms, tmpdir, prefer_jpg, jpg_quality, max_res))
+    return _drain(_iter_process_textures(norms, tmpdir, prefer_jpg, jpg_quality, max_res,
+                                         keep_normal_png))
 
 
-def _iter_process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=None):
+def _iter_process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_res=None,
+                           keep_normal_png=False):
     """Pre-pass over every texture in `norms`. Re-exports packed/generated/non-copyable
     images and (per `_plan_texture`) converts opaque textures to JPG and/or downscales to
     `max_res`, writing the result into `tmpdir` and mutating the texture dict in place into a
@@ -248,6 +252,11 @@ def _iter_process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_
     survives a later collision rename of the bundled basename. With `tex_opts` off
     (prefer_jpg False, max_res None) this reproduces the legacy 'packed/generated → PNG'
     behavior; without bpy it re-exports nothing (pure-Python tests copy on-disk files).
+
+    `keep_normal_png` overrides `prefer_jpg` for a texture that directly feeds the WL `normal`
+    channel: JPEG's lossy compression mangles a tangent-space normal map (blocky shading), so a
+    normal stays lossless (PNG, or an existing on-disk JPG left untouched) regardless of the
+    'Prefer JPG' choice.
 
     Generator: yields ("textures", i, total) after each material's textures are processed."""
     cache = {}      # image_name -> (path, basename) | None
@@ -268,13 +277,19 @@ def _iter_process_textures(norms, tmpdir, prefer_jpg=False, jpg_quality=90, max_
             if kind in ("missing", "udim"):
                 continue  # nothing to re-export (UDIM unsupported in v1)
             img_name = t.get("name")
-            if img_name not in cache:
+            # A normal map keeps prefer_jpg OFF (lossless) when keep_normal_png is set. The
+            # effective flag goes into the cache key, so the same image used both as a normal
+            # and as a colour map (pathological, but cheap to be correct about) is planned twice.
+            is_normal = any(mapper.channel_for_slot(s) == "normal" for s in check)
+            prefer_jpg_eff = prefer_jpg and not (keep_normal_png and is_normal)
+            key = (img_name, prefer_jpg_eff)
+            if key not in cache:
                 ext = os.path.splitext(t.get("path") or t.get("basename") or "")[1].lower()
                 has_alpha, w, h = _image_facts(img_name)
-                target, needs = _plan_texture(kind, ext, has_alpha, w, h, prefer_jpg, max_res)
-                cache[img_name] = (_export_image(img_name, tmpdir, used, target, jpg_quality, max_res)
-                                   if needs else None)
-            res = cache.get(img_name)
+                target, needs = _plan_texture(kind, ext, has_alpha, w, h, prefer_jpg_eff, max_res)
+                cache[key] = (_export_image(img_name, tmpdir, used, target, jpg_quality, max_res)
+                              if needs else None)
+            res = cache.get(key)
             if res:
                 t["fileKind"], t["path"], t["basename"] = "path", res[0], res[1]
                 reexported.add(res[0])      # srcPath of the re-exported file
@@ -374,7 +389,7 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, sur
     Material names are namespaced "<name>/<final>" (both export modes); a prop's
     CustomMaterial{i} references these exact strings. The "/" is legal in the `name`
     field (an internal reference, not a filename). `tex_opts` (or None) drives the texture
-    pre-pass: {prefer_jpg, jpg_quality, max_res}. `surface_type` is the WL EPhysicalSurface
+    pre-pass: {prefer_jpg, jpg_quality, max_res, keep_normal_png}. `surface_type` is the WL EPhysicalSurface
     name written to every material's `surfaceType` (one scene-wide choice). Returns (entries, tex_bytes,
     material_names) where material_names maps the original Blender material name ->
     its final namespaced customMaterials name.
@@ -384,7 +399,8 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, sur
     reexported = yield from _iter_process_textures(norms, tmpdir,
                                                    prefer_jpg=bool(opts.get("prefer_jpg")),
                                                    jpg_quality=int(opts.get("jpg_quality", 90)),
-                                                   max_res=opts.get("max_res"))
+                                                   max_res=opts.get("max_res"),
+                                                   keep_normal_png=bool(opts.get("keep_normal_png")))
 
     # Per-texture "what didn't make it, on which mesh, and why" detail (grouped by texture).
     #   missing:       (texture, reason) -> {texture, reason, materials/channels/objects: set}
@@ -516,7 +532,7 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thum
     Materials-only bundle. Collection name, material names and texture basenames are
     sanitized to the game's filename charset (see _sanitize_name); material names are
     additionally namespaced "<Collection>/<Mat>". `tex_opts` (or None) drives the texture
-    pre-pass: {prefer_jpg, jpg_quality, max_res}. `surface_type` is the WL EPhysicalSurface
+    pre-pass: {prefer_jpg, jpg_quality, max_res, keep_normal_png}. `surface_type` is the WL EPhysicalSurface
     name written to every material's `surfaceType`. `thumbnail` (or None) is a path to an image
     file bundled as the save's icon `<Name>/<Name>.png` (set `bHasDedicatedIcon`). Returns a
     report dict: name, nameOriginal, created[], renamed[], skipped[], texturesCopied[],
@@ -569,7 +585,7 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                      name ("Showroom"/"NewWildLifeMap"/"OldWildLifeMap") = a map save the Studio
                      installs under MySaves/<level>/. Only the JSON field changes — the ZIP layout
                      is identical either way.
-    `tex_opts`     — texture pre-pass options (or None): {prefer_jpg, jpg_quality, max_res}.
+    `tex_opts`     — texture pre-pass options (or None): {prefer_jpg, jpg_quality, max_res, keep_normal_png}.
     `material_baker` — optional callable `(norms) -> baked[]`, run BEFORE mapping. Bakes the
                      channels mapper flagged as `bakeCandidates` (procedural / multi-texture /
                      divergent-UV) into PNGs and injects them into `norms` as baked path textures,

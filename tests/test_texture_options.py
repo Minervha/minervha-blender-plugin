@@ -110,6 +110,56 @@ def test_missing_and_udim_are_skipped():
     assert _plan("udim", ".png", has_alpha=False, prefer_jpg=True, max_res=512) == (None, False)
 
 
+# --- keep_normal_png: normal maps stay lossless even with prefer_jpg --------------------------
+
+def _capture_targets(norms, **opts):
+    """Run the texture pre-pass with bpy faked: every image reported opaque (so the JPG path is
+    reachable without Blender) and `_export_image` stubbed to record the chosen target format
+    per image name. Returns {img_name: target_format} for the images that needed re-encoding
+    (an on-disk file copied as-is never reaches `_export_image`, so it won't appear)."""
+    captured = {}
+    orig_facts, orig_export = wlsave_export._image_facts, wlsave_export._export_image
+    wlsave_export._image_facts = lambda name: (False, 0, 0)        # opaque, no size cap
+    def _fake_export(image_name, dest_dir, used, target_format, jpg_quality, max_res):
+        captured[image_name] = target_format
+        return ("/tmp/%s" % image_name, image_name)
+    wlsave_export._export_image = _fake_export
+    try:
+        wlsave_export._process_textures(norms, "/tmp", **opts)
+    finally:
+        wlsave_export._image_facts, wlsave_export._export_image = orig_facts, orig_export
+    return captured
+
+
+def _one_tex_norm(name, path, slot):
+    return [{"name": "M", "textures": [
+        {"name": name, "fileKind": "path", "path": path, "basename": path,
+         "slots": [slot], "directSlots": [slot]}]}]
+
+
+def test_keep_normal_png_keeps_tga_normal_as_png_with_prefer_jpg():
+    norms = _one_tex_norm("nrm", "n.tga", "Normal")
+    assert _capture_targets(norms, prefer_jpg=True, keep_normal_png=True) == {"nrm": "PNG"}
+
+
+def test_normal_becomes_jpg_without_keep_normal_png():
+    # Legacy behavior (option off): a normal map is converted like any opaque texture.
+    norms = _one_tex_norm("nrm", "n.tga", "Normal")
+    assert _capture_targets(norms, prefer_jpg=True, keep_normal_png=False) == {"nrm": "JPEG"}
+
+
+def test_keep_normal_png_does_not_affect_diffuse():
+    norms = _one_tex_norm("col", "c.tga", "Base Color")
+    assert _capture_targets(norms, prefer_jpg=True, keep_normal_png=True) == {"col": "JPEG"}
+
+
+def test_ondisk_png_normal_is_copied_not_converted_with_keep_normal_png():
+    # An on-disk PNG normal already satisfies prefer_jpg-off, so it's copied as-is (never
+    # re-encoded) — it must not appear among the re-exported images.
+    norms = _one_tex_norm("nrm", "n.png", "Normal")
+    assert _capture_targets(norms, prefer_jpg=True, keep_normal_png=True) == {}
+
+
 # --- _image_facts fallback (no bpy) -------------------------------------------------------
 
 def test_image_facts_without_bpy_assumes_alpha_and_no_size():

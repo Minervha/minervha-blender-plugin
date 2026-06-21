@@ -94,6 +94,8 @@ def _options_label(context):
     parts = ["JPG q%d" % s.minervha_tex_jpg_quality if s.minervha_tex_prefer_jpg else "PNG",
              "max %s" % ("none" if mr == 'NONE' else mr + "px"),
              "flipGreen " + ("on" if s.minervha_flip_green else "off")]
+    if s.minervha_tex_prefer_jpg:
+        parts.append("normalPNG " + ("on" if s.minervha_tex_normal_png else "off"))
     if s.minervha_export_mode == 'SCENE':
         parts += ["bake " + ("on" if s.minervha_bake else "off"),
                   "collections " + ("on" if s.minervha_collection_hierarchy else "off"),
@@ -240,6 +242,7 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
     prefer_jpg = bool((tex_opts or {}).get("prefer_jpg"))
     jpg_quality = int((tex_opts or {}).get("jpg_quality", 90))
     max_res = (tex_opts or {}).get("max_res")
+    keep_normal_png = bool((tex_opts or {}).get("keep_normal_png"))
     fmt, ext = ("JPEG", ".jpg") if prefer_jpg else ("PNG", ".png")
 
     def baker(norms):
@@ -274,7 +277,10 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
                     uses_alpha = wlsave_export._material_uses_alpha(norm)
                     for ch in chans:
                         ch_alpha = uses_alpha and ch == "diffuse"
-                        ch_fmt, ch_ext = ("PNG", ".png") if ch_alpha else (fmt, ext)
+                        # Force PNG for an alpha-bearing diffuse (mask) or a normal map when
+                        # keep_normal_png is set (lossless — JPEG mangles tangent-space normals).
+                        keep_png = ch_alpha or (keep_normal_png and ch == "normal")
+                        ch_fmt, ch_ext = ("PNG", ".png") if keep_png else (fmt, ext)
                         safe = wlsave_export._sanitize_name(mat.name, "mat")
                         out = os.path.join(tex_dir, "%s_%s%s" % (safe, ch, ch_ext))
                         path = bake.bake_channel(mat, ch, res, out, image_format=ch_fmt,
@@ -618,6 +624,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         return {
             "prefer_jpg": bool(scene.minervha_tex_prefer_jpg),
             "jpg_quality": int(scene.minervha_tex_jpg_quality),
+            "keep_normal_png": bool(scene.minervha_tex_normal_png),
             # Hard rule: cap the longest side at 8192 px (covers source + baked), unless experimental.
             "max_res": export_limits.clamp_max_res(
                 None if mr == 'NONE' else int(mr), _experimental(context)),
@@ -1058,6 +1065,7 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         tex.prop(scene, "minervha_tex_prefer_jpg")
         if scene.minervha_tex_prefer_jpg:
             tex.prop(scene, "minervha_tex_jpg_quality")
+            tex.prop(scene, "minervha_tex_normal_png")
         tex.prop(scene, "minervha_tex_max_res", text="Max resolution")
         tex.prop(scene, "minervha_flip_green")
         if scene_mode:
@@ -1161,6 +1169,11 @@ def register():
     bpy.types.Scene.minervha_tex_jpg_quality = IntProperty(
         name="JPG Quality", default=90, min=1, max=100, subtype='PERCENTAGE',
         description="JPEG compression quality — higher is better quality but larger files")
+    bpy.types.Scene.minervha_tex_normal_png = BoolProperty(
+        name="Keep normal maps as PNG", default=True,
+        description="Never JPG-encode normal maps (the lossy compression mangles tangent-space "
+                    "normals into blocky shading). Normals stay lossless PNG even with 'Prefer JPG' "
+                    "on; an existing on-disk JPG normal is left untouched")
     bpy.types.Scene.minervha_tex_max_res = EnumProperty(
         name="Max Resolution", items=MAX_RES_ITEMS, default='NONE',
         description="Downscale textures whose longest side exceeds this size (keeps aspect ratio)")
@@ -1223,7 +1236,8 @@ def unregister():
         bpy.utils.unregister_class(cls)
     for prop in ("minervha_export_mode", "minervha_export_target", "minervha_scope",
                  "minervha_collection", "minervha_wlsave_name",
-                 "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_max_res",
+                 "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_normal_png",
+                 "minervha_tex_max_res",
                  "minervha_bake", "minervha_bake_res", "minervha_flip_green",
                  "minervha_collection_hierarchy", "minervha_master_group",
                  "minervha_enable_collision", "minervha_thumbnail_path",
