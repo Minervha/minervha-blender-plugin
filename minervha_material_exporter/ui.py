@@ -1170,7 +1170,7 @@ def register():
         name="JPG Quality", default=90, min=1, max=100, subtype='PERCENTAGE',
         description="JPEG compression quality — higher is better quality but larger files")
     bpy.types.Scene.minervha_tex_normal_png = BoolProperty(
-        name="Keep normal maps as PNG", default=True,
+        name="Keep normal maps as PNG", default=False,
         description="Never JPG-encode normal maps (the lossy compression mangles tangent-space "
                     "normals into blocky shading). Normals stay lossless PNG even with 'Prefer JPG' "
                     "on; an existing on-disk JPG normal is left untouched")
