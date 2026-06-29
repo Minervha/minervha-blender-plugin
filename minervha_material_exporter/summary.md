@@ -138,6 +138,17 @@ calls. `mapper.map_material(norm, surface_type="SurfaceType_Default")` writes it
 golden snapshot (`SurfaceType_Default`) green while the UI default is Stone. Threaded through
 `build_wlsave`/`build_scene_wlsave` → `_iter_build_material_entries` alongside `tex_opts`.
 
+**Specular override (both modes).** One scene-wide knob forcing every exported material's `specular`
+field to a single fixed value, bypassing each material's per-material Principled "Specular IOR Level" —
+a look-consistency lever (matching a whole kit's glossiness without hand-editing every node). `ui.py`
+adds `minervha_specular_override_enabled` + `minervha_specular_override` (FloatProperty, 0–1, default
+0.5) in the Textures box and threads the value into `_tex_opts` as `specular_override` (**None when the
+toggle is off**); `wlsave_export._process_textures`/`build_*` carry it to
+`mapper.map_material(norm, …, specular_override=None)`, which — when not None — clamps it to [0, 1],
+writes it to every entry's `specular`, and records a report note. Off (default) ⇒ per-material value
+unchanged, golden snapshot green. `0.0` is honored (the check is `is not None`, not truthiness). Tests:
+`test_specular_override.py`.
+
 **Responsive export + progress + last-export log (validated live Blender 5.1.2).** The export ran
 synchronously in `execute()` — on a 14740-object / 7682-mesh-datablock / 1421-image scene that froze Blender
 ("Not Responding") for minutes with no progress (bpy is single-threaded, so `wm.obj_export` / `Image.save` /
@@ -299,6 +310,7 @@ empty-branch pruning, multiple-membership first-wins, object-parent-kept, identi
 `test_logformat.py` (`format_export_log` — scene/materials/cancelled text, level label, timeline);
 `test_texture_collision.py` (dedup by srcPath, collision rename);
 `test_texture_options.py` (pure `_plan_texture` JPG/PNG/downscale decision + `keep_normal_png` keeps normals lossless via a faked-bpy pre-pass + `tex_opts` end-to-end);
+`test_specular_override.py` (the `specular_override` param: off = per-material value kept, on = forced + clamped to [0,1] + report note, `0.0` honored);
 `test_export_limits.py` (pure `evaluate` soft/hard breaches — scene/per-mesh/experimental — + `clamp_max_res` 8k rule);
 `test_missing_report.py` (per-texture `missingDetail`: packed → material+meshes+channel+reason; on-disk
 `file not found` tie-back; resolved texture → no entry);

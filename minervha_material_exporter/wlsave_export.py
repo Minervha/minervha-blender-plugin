@@ -389,9 +389,11 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, sur
     Material names are namespaced "<name>/<final>" (both export modes); a prop's
     CustomMaterial{i} references these exact strings. The "/" is legal in the `name`
     field (an internal reference, not a filename). `tex_opts` (or None) drives the texture
-    pre-pass: {prefer_jpg, jpg_quality, max_res, keep_normal_png}. `surface_type` is the WL EPhysicalSurface
-    name written to every material's `surfaceType` (one scene-wide choice). Returns (entries, tex_bytes,
-    material_names) where material_names maps the original Blender material name ->
+    pre-pass: {prefer_jpg, jpg_quality, max_res, keep_normal_png} plus the global
+    `specular_override` (None = off; else every material's `specular` field is forced to this
+    one value — see `mapper.map_material`). `surface_type` is the WL EPhysicalSurface name
+    written to every material's `surfaceType` (one scene-wide choice). Returns (entries,
+    tex_bytes, material_names) where material_names maps the original Blender material name ->
     its final namespaced customMaterials name.
 
     Generator: yields ("textures"/"map"/"read", done, total) through its loops."""
@@ -401,6 +403,7 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, sur
                                                    jpg_quality=int(opts.get("jpg_quality", 90)),
                                                    max_res=opts.get("max_res"),
                                                    keep_normal_png=bool(opts.get("keep_normal_png")))
+    specular_override = opts.get("specular_override")
 
     # Per-texture "what didn't make it, on which mesh, and why" detail (grouped by texture).
     #   missing:       (texture, reason) -> {texture, reason, materials/channels/objects: set}
@@ -433,7 +436,7 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, sur
     for mi, norm in enumerate(norms, 1):
         if mi % 128 == 0:
             yield ("map", mi, n_norms)
-        m = mapper.map_material(norm, surface_type)
+        m = mapper.map_material(norm, surface_type, specular_override=specular_override)
         if not m:
             report["skipped"].append(norm.get("name"))
             continue
@@ -532,11 +535,13 @@ def build_wlsave(norms, name, dest_path, skeleton_path=None, tex_opts=None, thum
     Materials-only bundle. Collection name, material names and texture basenames are
     sanitized to the game's filename charset (see _sanitize_name); material names are
     additionally namespaced "<Collection>/<Mat>". `tex_opts` (or None) drives the texture
-    pre-pass: {prefer_jpg, jpg_quality, max_res, keep_normal_png}. `surface_type` is the WL EPhysicalSurface
-    name written to every material's `surfaceType`. `thumbnail` (or None) is a path to an image
-    file bundled as the save's icon `<Name>/<Name>.png` (set `bHasDedicatedIcon`). Returns a
-    report dict: name, nameOriginal, created[], renamed[], skipped[], texturesCopied[],
-    texturesReExported[], texturesMissing[], texturesRenamed[], thumbnail.
+    pre-pass: {prefer_jpg, jpg_quality, max_res, keep_normal_png} plus the global
+    `specular_override` (None = off; else forces every material's `specular` field).
+    `surface_type` is the WL EPhysicalSurface name written to every material's `surfaceType`.
+    `thumbnail` (or None) is a path to an image file bundled as the save's icon
+    `<Name>/<Name>.png` (set `bHasDedicatedIcon`). Returns a report dict: name, nameOriginal,
+    created[], renamed[], skipped[], texturesCopied[], texturesReExported[], texturesMissing[],
+    texturesRenamed[], thumbnail.
     """
     return _drain(_iter_build_wlsave(norms, name, dest_path, skeleton_path, tex_opts, thumbnail, surface_type))
 
@@ -585,7 +590,9 @@ def build_scene_wlsave(norms, norm_objects, name, dest_path, obj_exporter, skele
                      name ("Showroom"/"NewWildLifeMap"/"OldWildLifeMap") = a map save the Studio
                      installs under MySaves/<level>/. Only the JSON field changes — the ZIP layout
                      is identical either way.
-    `tex_opts`     — texture pre-pass options (or None): {prefer_jpg, jpg_quality, max_res, keep_normal_png}.
+    `tex_opts`     — texture pre-pass options (or None): {prefer_jpg, jpg_quality, max_res,
+                     keep_normal_png} plus the global `specular_override` (None = off; else
+                     forces every material's `specular` field — see `mapper.map_material`).
     `material_baker` — optional callable `(norms) -> baked[]`, run BEFORE mapping. Bakes the
                      channels mapper flagged as `bakeCandidates` (procedural / multi-texture /
                      divergent-UV) into PNGs and injects them into `norms` as baked path textures,

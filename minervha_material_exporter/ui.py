@@ -14,7 +14,7 @@ import traceback
 
 import bpy
 from bpy.app.handlers import persistent
-from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper
 
 try:
@@ -96,6 +96,8 @@ def _options_label(context):
              "flipGreen " + ("on" if s.minervha_flip_green else "off")]
     if s.minervha_tex_prefer_jpg:
         parts.append("normalPNG " + ("on" if s.minervha_tex_normal_png else "off"))
+    if s.minervha_specular_override_enabled:
+        parts.append("specular override %.2f" % s.minervha_specular_override)
     if s.minervha_export_mode == 'SCENE':
         parts += ["bake " + ("on" if s.minervha_bake else "off"),
                   "collections " + ("on" if s.minervha_collection_hierarchy else "off"),
@@ -618,13 +620,17 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         self._phase_start = {}        # phase -> elapsed seconds when first seen (for the log timeline)
 
     def _tex_opts(self, context):
-        """Texture pre-pass options from the scene props (see wlsave_export._process_textures)."""
+        """Texture pre-pass options from the scene props (see wlsave_export._process_textures),
+        plus the global `specular_override` (None = off; else forces every material's
+        `specular` field — see mapper.map_material)."""
         scene = context.scene
         mr = scene.minervha_tex_max_res
         return {
             "prefer_jpg": bool(scene.minervha_tex_prefer_jpg),
             "jpg_quality": int(scene.minervha_tex_jpg_quality),
             "keep_normal_png": bool(scene.minervha_tex_normal_png),
+            "specular_override": (float(scene.minervha_specular_override)
+                                   if scene.minervha_specular_override_enabled else None),
             # Hard rule: cap the longest side at 8192 px (covers source + baked), unless experimental.
             "max_res": export_limits.clamp_max_res(
                 None if mr == 'NONE' else int(mr), _experimental(context)),
@@ -1068,6 +1074,10 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
             tex.prop(scene, "minervha_tex_normal_png")
         tex.prop(scene, "minervha_tex_max_res", text="Max resolution")
         tex.prop(scene, "minervha_flip_green")
+        tex.separator()
+        tex.prop(scene, "minervha_specular_override_enabled")
+        if scene.minervha_specular_override_enabled:
+            tex.prop(scene, "minervha_specular_override", slider=True)
         if scene_mode:
             tex.separator()
             tex.prop(scene, "minervha_bake")
@@ -1177,6 +1187,16 @@ def register():
     bpy.types.Scene.minervha_tex_max_res = EnumProperty(
         name="Max Resolution", items=MAX_RES_ITEMS, default='NONE',
         description="Downscale textures whose longest side exceeds this size (keeps aspect ratio)")
+    bpy.types.Scene.minervha_specular_override_enabled = BoolProperty(
+        name="Override specular", default=False,
+        description="Force every exported material's specular value to a single fixed number, "
+                    "ignoring each material's own Principled 'Specular IOR Level'. Useful for "
+                    "matching the in-game look across a whole kit without hand-editing every "
+                    "material's node")
+    bpy.types.Scene.minervha_specular_override = FloatProperty(
+        name="Specular", default=0.5, min=0.0, max=1.0, soft_min=0.0, soft_max=1.0,
+        description="Specular value written to every exported material when 'Override specular' "
+                    "is on (matches Wild Life's specular field, 0–1)")
     bpy.types.Scene.minervha_bake = BoolProperty(
         name="Bake procedural / complex shading", default=True,
         description="Scene mode: bake the channels flagged as bakeCandidates (procedural, "
@@ -1238,6 +1258,7 @@ def unregister():
                  "minervha_collection", "minervha_wlsave_name",
                  "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_normal_png",
                  "minervha_tex_max_res",
+                 "minervha_specular_override_enabled", "minervha_specular_override",
                  "minervha_bake", "minervha_bake_res", "minervha_flip_green",
                  "minervha_collection_hierarchy", "minervha_master_group",
                  "minervha_enable_collision", "minervha_thumbnail_path",

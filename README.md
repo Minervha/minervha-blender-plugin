@@ -46,6 +46,10 @@ mangles tangent-space normals into blocky shading. An optional
 formats (`.tga`, `.exr`…) are re-exported automatically. Turn *Prefer JPG over PNG* off to keep on-disk
 PNG/JPG as-is and re-export the rest to PNG.
 
+*Override specular* (off by default) forces every exported material's specular to one fixed value (0–1),
+ignoring each material's own *Specular IOR Level* — handy for matching a whole kit's look in-game without
+hand-editing every material's node.
+
 **Names**: the game only accepts `A-Za-z0-9_-` in file names. The collection name, material names and
 texture file names are sanitized automatically (accents transliterated — `é`→`e` — other symbols replaced
 with `_`); the export report lists anything that was renamed.

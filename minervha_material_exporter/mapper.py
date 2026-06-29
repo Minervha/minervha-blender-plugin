@@ -82,7 +82,13 @@ CHANNEL_TO_FIELD = {
 }
 
 
-def map_material(norm, surface_type="SurfaceType_Default"):
+def map_material(norm, surface_type="SurfaceType_Default", specular_override=None):
+    """norm -> ({"entry": customMaterials entry, "report": ...}) | None (skipped material).
+
+    `specular_override` (None = off) forces every exported material's `specular` field to this
+    one value, ignoring whatever the per-material Principled "Specular IOR Level" resolved to
+    (still clamped to [0, 1] like the per-node value would be). A global look-consistency knob —
+    e.g. matching the rest of a kit's glossiness without hand-editing every material's node."""
     if not norm or norm.get("skipped"):
         return None
 
@@ -321,6 +327,9 @@ def map_material(norm, surface_type="SurfaceType_Default"):
     ac = norm.get("alphaCutoff")
     cutoff = clamp01(ac) if (_is_num(ac) and ac > 0) else 0.5
     specular = clamp01(norm.get("specular")) if _is_num(norm.get("specular")) else 0.5
+    if specular_override is not None:
+        specular = clamp01(specular_override)
+        report["notes"].append("specular overridden globally -> %.3f (ignored per-material value)" % specular)
     two_sided = bool(norm.get("twoSided")) if isinstance(norm.get("twoSided"), bool) else False
 
     # Triplanar: a real projection-mapped texture (Object/Generated coords or Box
