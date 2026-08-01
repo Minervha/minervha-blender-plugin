@@ -63,12 +63,18 @@ the material —
 | File | Content |
 |---|---|
 | `<Material>_D.png` | the map feeding **Base Color** |
-| `<Material>_ORM.png` | **R = AO, G = Roughness, B = Metallic** |
 | `<Material>_N.png` | the map feeding **Normal** |
+| AO / Roughness / Metallic | either **combined** into `<Material>_ORM.png` (R = AO, G = Roughness, B = Metallic) or **separate**: `<Material>_AO.png`, `_R.png`, `_M.png` |
 
 Install it like the other one (its own `.zip`); both can be installed at once. In the **Minervha**
-tab, the **Texture Set** panel: pick an output folder, optionally a **Max resolution** cap
-(downscales only what exceeds it, aspect kept), and press **Export Textures**.
+tab, the **Texture Set** panel: pick an output folder, the **AO/Rough/Metal** layout (*Combined* or
+*Separate*), optionally a **Max resolution** cap (downscales only what exceeds it, aspect kept), and
+press **Export Textures**.
+
+The two layouts differ in how missing data is treated. *Combined* always writes one complete file —
+every channel needs a value, so a missing AO is white and an unflattenable roughness falls back to a
+reported neutral. *Separate* only ever writes maps that carry real data: no packed source means no
+`_AO` file at all, exactly as a material with no normal input gets no `_N`.
 
 Per channel: a directly plugged texture is copied (and downscaled); a constant value becomes a flat
 map; a node graph is flattened with a **Cycles bake** (toggle, on by default — turn it off and a
@@ -77,8 +83,7 @@ procedural channel falls back to a reported neutral instead).
 **AO** is only real when the material already uses a **packed ORM/MRAO texture** — i.e. roughness
 and/or metallic come out of a *Separate Color* node. The AO slot is then *derived* from the channels
 those two occupy (rough=G + metal=B → AO=R; metal=R + rough=G → AO=B), never guessed from a file
-name. Without a packed source the red channel is filled white. A material with no normal input gets
-no `_N` file, and the run's report says so.
+name. Whatever is skipped is listed per material in the run's report.
 
 ## Structure
 

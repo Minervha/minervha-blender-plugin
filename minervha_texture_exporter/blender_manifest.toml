@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "minervha_texture_exporter"
-version = "0.1.0"
+version = "0.2.0"
 name = "Minervha Texture Exporter"
 tagline = "Export material textures as _D / _ORM / _N map sets"
 maintainer = "Minervha Studio <217040744+Minervha@users.noreply.github.com>"

@@ -4,19 +4,26 @@ Policy (pure decisions at the top, orchestration below):
 
   `<Material>_D.png`    Base Color — the plugged texture (downscaled to the cap), a flat
                         fill for a constant colour, or a bake for a node graph.
-  `<Material>_ORM.png`  R = AO, G = Roughness, B = Metallic, composed pixel-wise.
-                        AO exists only when roughness/metallic come out of a **packed**
-                        texture (through a Separate node); its index is then *derived*
-                        from the channels those two occupy — never guessed from a file
-                        name. No packed source ⇒ white (1.0).
   `<Material>_N.png`    Normal — the plugged texture, or a bake. A material with no
                         normal input gets no file (a flat 128/128/255 map is noise).
 
-Sizes: a map that comes from a texture keeps that texture's size, capped. The ORM is
-composed at its largest image contributor, capped, and its other contributors are
-resampled to match. A map with no image behind it (flat or baked) uses the material's
-reference size — `next_pow2` of its largest source texture, capped, 1024 if the material
-has no texture at all.
+and, for the AO/Roughness/Metallic trio, one of two layouts (`orm_mode`):
+
+  "packed"  `<Material>_ORM.png`  R = AO, G = Roughness, B = Metallic, composed pixel-wise.
+  "split"   `<Material>_AO.png`, `<Material>_R.png`, `<Material>_M.png` — one map each.
+
+AO exists only when roughness/metallic come out of a **packed** texture (through a Separate
+node); its index is then *derived* from the channels those two occupy — never guessed from a
+file name. With no packed source the packed layout fills R white (the channel has to hold
+something) while the split layout simply writes no `_AO` file, the same rule `_N` follows.
+That difference in the face of missing data is the only thing separating the two modes:
+packed always emits one complete file, split only ever emits maps that carry real data.
+
+Sizes: a map that comes from a texture keeps that texture's size, capped. The packed ORM is
+composed at its largest image contributor, capped, with the others resampled to match; split
+maps are under no such constraint and each keeps its own size. A map with no image behind it
+(flat or baked) uses the material's reference size — `next_pow2` of its largest source
+texture, capped, 1024 if the material has no texture at all.
 
 The pure helpers (`sanitize_name`, `unique_name`, `reference_size`, `infer_ao`) carry the
 policy and are unit-tested without Blender; the `export_*` functions do the bpy work.
@@ -35,10 +42,16 @@ except ImportError:                              # dev / sys.path import
     import sources
 
 
-SUFFIXES = {"diffuse": "_D", "orm": "_ORM", "normal": "_N"}
+SUFFIXES = {"diffuse": "_D", "orm": "_ORM", "normal": "_N",
+            "ao": "_AO", "roughness": "_R", "metallic": "_M"}
+
+# How the AO/Roughness/Metallic trio is laid out on disk.
+ORM_PACKED = "packed"
+ORM_SPLIT = "split"
 
 # Neutral values used when a channel is procedural and baking is off/unavailable: mid
-# roughness and non-metal. Reported, never silent — the ORM stays complete either way.
+# roughness and non-metal. Only the PACKED layout uses them — its single file must hold a
+# value for every channel. Reported, never silent. The split layout writes no file instead.
 FALLBACK_ROUGHNESS = 0.5
 FALLBACK_METALLIC = 0.0
 
@@ -228,7 +241,7 @@ def _orm_channel(mat, channel, src, width, height, fallback, baker, record):
     return images.flat_channel(fallback, width, height)
 
 
-def _export_orm(mat, srcs, out_dir, name, cap, reference, baker, record):
+def _export_orm_packed(mat, srcs, out_dir, name, cap, reference, baker, record):
     """Compose and write `<name>_ORM.png` (R=AO, G=Roughness, B=Metallic)."""
     roughness_src, metallic_src = srcs.get("roughness"), srcs.get("metallic")
     ao_src = infer_ao(roughness_src, metallic_src)
@@ -257,7 +270,80 @@ def _export_orm(mat, srcs, out_dir, name, cap, reference, baker, record):
         record["notes"].append("ORM: could not be written")
 
 
-def export_material(mat, out_dir, cap, baker, taken):
+def _export_scalar_map(mat, channel, src, out_dir, name, cap, reference, baker, record):
+    """Write one standalone scalar map (`_R` / `_M`) — split layout only.
+
+    Free of the packing constraint, so each map keeps its own natural size. A texture that
+    IS the map (plugged whole) is copied verbatim rather than rebuilt from one channel, so
+    an authored roughness map survives byte-for-byte. Unlike the packed layout, a channel
+    with no real data produces NO file: a flat neutral standing in for an unbakeable graph
+    would be a plausible-looking lie in its own file."""
+    path = os.path.join(out_dir, name + SUFFIXES[channel] + ".png")
+    kind = src.get("kind") if src else "none"
+    if kind == "image":
+        image = src["image"]
+        if src.get("channel") is None:
+            if images.write_direct(image, path, cap):
+                record["files"].append(os.path.basename(path))
+            else:
+                record["notes"].append("%s: '%s' could not be read (no map written)"
+                                       % (channel, image.name))
+            return
+        width, height = images.fit(*images.dimensions(image), cap)
+        arr = images.read_channel(image, src["channel"], width, height)
+        if arr is not None and images.write_gray(arr, width, height, path):
+            record["files"].append(os.path.basename(path))
+            record["notes"].append("%s: extracted from packed %s (channel %s)"
+                                   % (channel, image.name, "RGBA"[src["channel"]]))
+        else:
+            record["notes"].append("%s: '%s' could not be read (no map written)"
+                                   % (channel, image.name))
+        return
+    if kind == "const" and src.get("value") is not None:
+        value = src["value"]
+        value = value[0] if hasattr(value, "__len__") else value
+        if images.write_gray(images.flat_channel(value, reference, reference),
+                             reference, reference, path):
+            record["files"].append(os.path.basename(path))
+            record["notes"].append("%s: constant %.3f — flat %dpx map" % (channel, value, reference))
+        return
+    if not baker.available:
+        record["notes"].append("%s: procedural — enable Bake to flatten it (no map written)"
+                               % channel)
+        return
+    if baker.to_file(mat, channel, reference, path):
+        record["files"].append(os.path.basename(path))
+        record["baked"].append(channel)
+    else:
+        record["notes"].append("%s: bake produced nothing (no map written)" % channel)
+
+
+def _export_orm_split(mat, srcs, out_dir, name, cap, reference, baker, record):
+    """Write AO / Roughness / Metallic as three standalone maps (`_AO` / `_R` / `_M`).
+
+    `_AO` is written only when a packed texture actually carries it — with no packed source
+    there is no AO data to export, so (like `_N`) no file is produced and the report says so.
+    The packed layout's white fill exists only because its single file needs a red channel."""
+    ao_src = infer_ao(srcs.get("roughness"), srcs.get("metallic"))
+    if ao_src is None:
+        record["ao"] = "none (no packed source — no _AO written)"
+    else:
+        image = ao_src["image"]
+        width, height = images.fit(*images.dimensions(image), cap)
+        arr = images.read_channel(image, ao_src["channel"], width, height)
+        path = os.path.join(out_dir, name + SUFFIXES["ao"] + ".png")
+        if arr is not None and images.write_gray(arr, width, height, path):
+            record["files"].append(os.path.basename(path))
+            record["ao"] = "packed %s (channel %s)" % (image.name, "RGB"[ao_src["channel"]])
+        else:
+            record["ao"] = "unreadable"
+            record["notes"].append("AO: '%s' could not be read (no _AO written)" % image.name)
+    for channel in ("roughness", "metallic"):
+        _export_scalar_map(mat, channel, srcs.get(channel), out_dir, name, cap, reference,
+                           baker, record)
+
+
+def export_material(mat, out_dir, cap, baker, taken, orm_mode=ORM_PACKED):
     """Export one material's map set into `out_dir`. Returns its report record."""
     record = {"material": mat.name, "name": None, "files": [], "baked": [], "notes": [],
               "ao": None}
@@ -270,7 +356,8 @@ def export_material(mat, out_dir, cap, baker, taken):
     record["name"] = name
     reference = reference_size(sources.max_source_dim(mat), cap)
     _export_diffuse(mat, srcs["diffuse"], out_dir, name, cap, reference, baker, record)
-    _export_orm(mat, srcs, out_dir, name, cap, reference, baker, record)
+    orm_export = _export_orm_split if orm_mode == ORM_SPLIT else _export_orm_packed
+    orm_export(mat, srcs, out_dir, name, cap, reference, baker, record)
     _export_normal(mat, srcs["normal"], out_dir, name, cap, reference, baker, record)
     return record
 
@@ -285,12 +372,14 @@ def needs_bake(materials):
     return False
 
 
-def export_texture_sets(materials, out_dir, cap=None, allow_bake=True, on_material=None):
-    """Export every material's `_D`/`_ORM`/`_N` set into `out_dir`.
+def export_texture_sets(materials, out_dir, cap=None, allow_bake=True, on_material=None,
+                        orm_mode=ORM_PACKED):
+    """Export every material's map set into `out_dir`.
 
     `cap` caps the longest side (None = no limit). `allow_bake` opts into flattening
-    procedural channels with Cycles. `on_material(index, total, name)` is an optional
-    progress callback. Returns {"records": [...], "files": n, "bake": "..."}.
+    procedural channels with Cycles. `orm_mode` is "packed" (one `_ORM`) or "split"
+    (`_AO`/`_R`/`_M`). `on_material(index, total, name)` is an optional progress callback.
+    Returns {"records": [...], "files": n, "bake": "...", "ormMode": "..."}.
 
     One material's failure is isolated: it is recorded and the run continues — a single bad
     node tree must not cost the whole export."""
@@ -308,7 +397,7 @@ def export_texture_sets(materials, out_dir, cap=None, allow_bake=True, on_materi
             if on_material is not None:
                 on_material(i, len(materials), mat.name)
             try:
-                records.append(export_material(mat, out_dir, cap, baker, taken))
+                records.append(export_material(mat, out_dir, cap, baker, taken, orm_mode))
             except Exception as exc:
                 records.append({"material": mat.name, "name": None, "files": [], "baked": [],
                                 "ao": None,
@@ -316,14 +405,17 @@ def export_texture_sets(materials, out_dir, cap=None, allow_bake=True, on_materi
                 print("Minervha Textures: material '%s' failed (%s) — export continues"
                       % (mat.name, exc))
     return {"records": records, "files": sum(len(r["files"]) for r in records),
-            "bake": bake_state, "dir": out_dir}
+            "bake": bake_state, "dir": out_dir, "ormMode": orm_mode}
 
 
 def format_report(report):
     """Render a report as plain text (system console + the panel's last-run log)."""
+    layout = ("_AO / _R / _M (separate)" if report.get("ormMode") == ORM_SPLIT
+              else "_ORM (combined)")
     lines = ["Minervha Texture Exporter — last run", "=" * 36,
              "Output: %s" % report.get("dir", ""),
-             "Files written: %d   Bake: %s" % (report.get("files", 0), report.get("bake", "")),
+             "Files written: %d   Bake: %s   Layout: %s"
+             % (report.get("files", 0), report.get("bake", ""), layout),
              ""]
     for rec in report.get("records", []):
         head = rec["name"] or rec["material"]

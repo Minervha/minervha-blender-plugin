@@ -199,6 +199,54 @@ def main():
             check("baked Base Color sRGB-encoded (0.5 lin -> ~0.735)",
                   abs(r - 0.7354) < 0.02, "stored=%.3f" % r)
 
+    # ── Split layout: the same materials, one map per channel ────────────────────────
+    print("Split layout — _AO / _R / _M instead of _ORM")
+    split_dir = tempfile.mkdtemp(prefix="mvtexsplit_")
+    split = export.export_texture_sets(materials, split_dir, cap=64, allow_bake=True,
+                                       orm_mode=export.ORM_SPLIT)
+    print(export.format_report(split))
+    written = sorted(os.listdir(split_dir))
+    check("no _ORM file in split mode", not any(f.endswith("_ORM.png") for f in written),
+          str(written))
+
+    ao, r, m = (os.path.join(split_dir, "Packed_Crate" + s) for s in ("_AO.png", "_R.png", "_M.png"))
+    check("packed material split into _AO / _R / _M",
+          all(os.path.isfile(p) for p in (ao, r, m)))
+    if os.path.isfile(ao):
+        check("_AO carries the packed AO 0.25", abs(read_pixel(ao)[0] - 0.25) < 0.01,
+              "r=%.3f" % read_pixel(ao)[0])
+    if os.path.isfile(r):
+        check("_R carries roughness 0.50", abs(read_pixel(r)[0] - 0.50) < 0.01,
+              "r=%.3f" % read_pixel(r)[0])
+    if os.path.isfile(m):
+        check("_M carries metallic 0.75", abs(read_pixel(m)[0] - 0.75) < 0.01,
+              "r=%.3f" % read_pixel(m)[0])
+
+    # The whole point of the split layout: no invented data. No packed source -> no _AO.
+    check("no _AO for a material without a packed source",
+          not os.path.isfile(os.path.join(split_dir, "Flat_Const_AO.png")))
+    r2 = os.path.join(split_dir, "Flat_Const_R.png")
+    if os.path.isfile(r2):
+        check("constant roughness still written flat", abs(read_pixel(r2)[0] - 0.30) < 0.01,
+              "r=%.3f" % read_pixel(r2)[0])
+    check("_D and _N unaffected by the layout",
+          os.path.isfile(os.path.join(split_dir, "Packed_Crate_D.png"))
+          and os.path.isfile(os.path.join(split_dir, "Packed_Crate_N.png")))
+
+    print("Split layout — bake off leaves no invented map")
+    nobake_dir = tempfile.mkdtemp(prefix="mvtexnobake_")
+    export.export_texture_sets([materials[2]], nobake_dir, cap=64, allow_bake=False,
+                               orm_mode=export.ORM_SPLIT)
+    check("procedural roughness writes no _R when baking is off",
+          not os.path.isfile(os.path.join(nobake_dir, "Proc_Rough_R.png")),
+          str(sorted(os.listdir(nobake_dir))))
+    nobake_packed = tempfile.mkdtemp(prefix="mvtexnbp_")
+    export.export_texture_sets([materials[2]], nobake_packed, cap=64, allow_bake=False,
+                               orm_mode=export.ORM_PACKED)
+    orm_nb = os.path.join(nobake_packed, "Proc_Rough_ORM.png")
+    check("packed layout still emits a complete _ORM (neutral roughness)",
+          os.path.isfile(orm_nb) and abs(read_pixel(orm_nb)[1] - 0.5) < 0.01)
+
     print("\n%s — %d failure(s)%s" % ("FAILED" if FAILURES else "PASSED", len(FAILURES),
                                       (": " + ", ".join(FAILURES)) if FAILURES else ""))
     print("Output kept at: %s" % out_dir)

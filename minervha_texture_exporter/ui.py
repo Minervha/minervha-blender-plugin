@@ -31,6 +31,16 @@ MAX_RES_ITEMS = [
     ('512', "512 px", "Downscale maps whose longest side exceeds 512 px"),
 ]
 
+# How AO/Roughness/Metallic land on disk. The identifiers map to export.ORM_PACKED/ORM_SPLIT.
+ORM_MODE_ITEMS = [
+    ('PACKED', "Combined (_ORM)",
+     "One packed map per material: R = AO, G = Roughness, B = Metallic. Missing AO is "
+     "filled white"),
+    ('SPLIT', "Separate (_AO / _R / _M)",
+     "One map per channel. Only channels that carry real data are written — no packed "
+     "source means no _AO file"),
+]
+
 # Last run's report text, shown in the panel and echoed to the system console.
 _LAST_REPORT = ""
 
@@ -81,7 +91,9 @@ class MINERVHATEX_OT_export(bpy.types.Operator):
         try:
             report = export.export_texture_sets(
                 materials, out_dir, cap=cap, allow_bake=bool(scene.minervha_texset_bake),
-                on_material=lambda i, total, name: wm.progress_update(i))
+                on_material=lambda i, total, name: wm.progress_update(i),
+                orm_mode=(export.ORM_SPLIT if scene.minervha_texset_orm_mode == 'SPLIT'
+                          else export.ORM_PACKED))
         except Exception as exc:
             self.report({'ERROR'}, "Export failed: %s" % exc)
             raise
@@ -107,7 +119,9 @@ def _popup_report(context, report):
     def draw(self, _ctx):
         layout = self.layout
         layout.label(text="Output: %s" % report["dir"])
-        layout.label(text="Files written: %d   (bake: %s)" % (report["files"], report["bake"]))
+        layout.label(text="Files written: %d   (bake: %s, %s)"
+                          % (report["files"], report["bake"],
+                             "_AO/_R/_M" if report["ormMode"] == export.ORM_SPLIT else "_ORM"))
         for rec in report["records"]:
             layout.separator()
             layout.label(text=rec["name"] or rec["material"], icon='MATERIAL')
@@ -134,14 +148,20 @@ class MINERVHATEX_PT_panel(bpy.types.Panel):
         col = layout.column()
         col.prop(scene, "minervha_texset_dir", text="Folder")
         col.prop(scene, "minervha_texset_max_res", text="Max resolution")
+        col.prop(scene, "minervha_texset_orm_mode", text="AO/Rough/Metal")
         col.prop(scene, "minervha_texset_bake")
 
         materials = _scope_materials(context)
+        # What the material would produce, so the naming is visible before exporting. The
+        # split preview lists every possible map — whether _AO lands depends on the material
+        # actually using a packed texture, which the report spells out per material.
+        pattern = ("_D / _AO / _R / _M / _N" if scene.minervha_texset_orm_mode == 'SPLIT'
+                   else "_D / _ORM / _N")
         box = layout.box()
         box.label(text="%d material(s) on %d selected mesh(es)"
                        % (len(materials), len(_selected_meshes(context))), icon='MATERIAL')
         for mat in materials[:8]:
-            box.label(text="    %s_D / _ORM / _N" % export.sanitize_name(mat.name))
+            box.label(text="    %s%s" % (export.sanitize_name(mat.name), pattern))
         if len(materials) > 8:
             box.label(text="    ... (+%d more)" % (len(materials) - 8))
 
@@ -179,6 +199,10 @@ def register():
         name="Max Resolution", items=MAX_RES_ITEMS, default='NONE',
         description="Downscale any map whose longest side exceeds this size (keeps aspect "
                     "ratio). Maps already smaller are left untouched")
+    bpy.types.Scene.minervha_texset_orm_mode = EnumProperty(
+        name="AO / Roughness / Metallic", items=ORM_MODE_ITEMS, default='PACKED',
+        description="Whether the three channels are packed into one _ORM map or written as "
+                    "separate _AO / _R / _M maps")
     bpy.types.Scene.minervha_texset_bake = BoolProperty(
         name="Bake procedural channels", default=True,
         description="Flatten channels driven by a node graph (Mix / Math / Noise ...) with "
@@ -190,6 +214,7 @@ def register():
 def unregister():
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
-    for prop in ("minervha_texset_dir", "minervha_texset_max_res", "minervha_texset_bake"):
+    for prop in ("minervha_texset_dir", "minervha_texset_max_res",
+                 "minervha_texset_orm_mode", "minervha_texset_bake"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)

@@ -142,6 +142,13 @@ def test_socket_channel_map_covers_separate_and_alpha():
     assert sources.SOCKET_CHANNEL["Alpha"] == 3
 
 
+def test_suffixes_cover_both_orm_layouts():
+    """The packed layout writes _D/_ORM/_N; the split layout swaps _ORM for _AO/_R/_M."""
+    assert export.SUFFIXES == {"diffuse": "_D", "orm": "_ORM", "normal": "_N",
+                               "ao": "_AO", "roughness": "_R", "metallic": "_M"}
+    assert (export.ORM_PACKED, export.ORM_SPLIT) == ("packed", "split")
+
+
 def test_channel_inputs_are_the_four_exported_channels():
     assert sources.CHANNEL_INPUTS == {
         "diffuse": "Base Color", "roughness": "Roughness",

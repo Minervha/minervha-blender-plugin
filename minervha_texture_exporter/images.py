@@ -210,6 +210,19 @@ def write_flat_color(rgba, width, height, path):
     return write_buffer(buf, width, height, path, "sRGB")
 
 
+def write_gray(values, width, height, path):
+    """Write one channel as its own map — R=G=B=value, Non-Color (raw data, no encoding).
+
+    Grey RGB rather than a true single-channel PNG: Blender's image buffer is always RGBA,
+    so a 1-channel file would mean re-encoding by hand for no gain — every engine reads the
+    red channel of a grey map just the same."""
+    buf = np.empty(width * height * 4, dtype=np.float32)
+    for i in range(3):
+        buf[i::4] = values
+    buf[3::4] = 1.0
+    return write_buffer(buf, width, height, path, "Non-Color")
+
+
 def flat_channel(value, width, height):
     """A constant channel as a flat float array — a scalar Roughness/Metallic in the ORM."""
     return np.full(width * height, float(value), dtype=np.float32)
