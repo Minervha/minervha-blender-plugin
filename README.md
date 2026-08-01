@@ -54,6 +54,32 @@ hand-editing every material's node.
 texture file names are sanitized automatically (accents transliterated — `é`→`e` — other symbols replaced
 with `_`); the export report lists anything that was renamed.
 
+## Texture Set Exporter (second, independent extension)
+
+`minervha_texture_exporter/` is a separate add-on in this repo. It has nothing to do with Wild Life:
+it writes plain, engine-agnostic PBR maps for every material of the selected mesh(es), named after
+the material —
+
+| File | Content |
+|---|---|
+| `<Material>_D.png` | the map feeding **Base Color** |
+| `<Material>_ORM.png` | **R = AO, G = Roughness, B = Metallic** |
+| `<Material>_N.png` | the map feeding **Normal** |
+
+Install it like the other one (its own `.zip`); both can be installed at once. In the **Minervha**
+tab, the **Texture Set** panel: pick an output folder, optionally a **Max resolution** cap
+(downscales only what exceeds it, aspect kept), and press **Export Textures**.
+
+Per channel: a directly plugged texture is copied (and downscaled); a constant value becomes a flat
+map; a node graph is flattened with a **Cycles bake** (toggle, on by default — turn it off and a
+procedural channel falls back to a reported neutral instead).
+
+**AO** is only real when the material already uses a **packed ORM/MRAO texture** — i.e. roughness
+and/or metallic come out of a *Separate Color* node. The AO slot is then *derived* from the channels
+those two occupy (rough=G + metal=B → AO=R; metal=R + rough=G → AO=B), never guessed from a file
+name. Without a packed source the red channel is filled white. A material with no normal input gets
+no `_N` file, and the run's report says so.
+
 ## Structure
 
 ```
@@ -66,6 +92,14 @@ minervha_material_exporter/    # extension source (build root)
   mapper.py                     # NormalizedMaterial -> customMaterials  (port of mapMaterial.js)
   wlsave_export.py              # NormalizedMaterial[] -> .wlsave bundle
   skeleton.json                 # collection skeleton for the .wlsave
+minervha_texture_exporter/     # second extension (build root) — _D/_ORM/_N map sets
+  blender_manifest.toml
+  __init__.py                   # register -> ui
+  ui.py                         # "Texture Set" panel + Export Textures operator
+  sources.py                    # material -> per-channel source (image / constant / procedural)
+  images.py                     # pixel plumbing: cap, channel read, ORM packing, PNG write
+  bake.py                       # Cycles fallback for procedural channels
+  export.py                     # naming, AO inference, orchestration, report
 tests/                          # Python<->JS parity (mapper golden)
 ```
 

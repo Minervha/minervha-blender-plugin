@@ -1,0 +1,20 @@
+schema_version = "1.0.0"
+
+id = "minervha_texture_exporter"
+version = "0.1.0"
+name = "Minervha Texture Exporter"
+tagline = "Export material textures as _D / _ORM / _N map sets"
+maintainer = "Minervha Studio <217040744+Minervha@users.noreply.github.com>"
+type = "add-on"
+
+# Add-on tags from Blender's allowed list.
+tags = ["Import-Export", "Material"]
+
+blender_version_min = "4.2.0"
+
+# bpy add-ons are derivative works of Blender → must be GPL-compatible.
+license = ["SPDX:GPL-3.0-or-later"]
+
+# The add-on reads the scene's textures and writes PNG map sets to a chosen folder.
+[permissions]
+files = "Read scene textures and write PNG map sets to a chosen folder"
