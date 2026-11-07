@@ -2,7 +2,7 @@
 
 Run INSIDE Blender (it needs bpy). From Blender's Python Console:
 
-    exec(open(r"F:\\Minervha\\Studio\\Minervha Blender Plugin\\tests\\verify_introspect_live.py").read())
+    exec(open(r"G:\\Projets\\Minervha\\Minervha Blender Plugin\\tests\\verify_introspect_live.py").read())
 
 It (1) confirms the Principled BSDF input names this Blender build exposes,
 (2) builds a synthetic material exercising every new path (height via Bump and via
@@ -19,7 +19,7 @@ import bpy
 
 # Robust when run via exec(open(...).read()) in Blender's console, where __file__
 # is undefined: fall back to the known repo path on this machine.
-_REPO = r"F:\Minervha\Studio\Minervha Blender Plugin"
+_REPO = r"G:\Projets\Minervha\Minervha Blender Plugin"
 try:
     HERE = os.path.dirname(os.path.abspath(__file__))
 except NameError:

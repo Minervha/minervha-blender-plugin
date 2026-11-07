@@ -4,7 +4,7 @@ Builds a synthetic scene (nested collections + a view-layer-EXCLUDED collection 
 object-parented empty), then exercises scene_introspect.collect / exportable_objects with
 collection_hierarchy=True and asserts the resulting prop tree matches the outliner.
 
-Run:  F:\\Blender\\5.1\\blender.exe --background --python tests/verify_collection_hierarchy_live.py
+Run:  F:\\Software\\Blender\\5.1\\blender.exe --background --python tests/verify_collection_hierarchy_live.py
 Exits non-zero on any failure (so it can gate a release).
 """
 
