@@ -184,6 +184,7 @@ SURFACE_TYPE_ITEMS = [
 
 
 # WL channel -> the Blender Principled slot a baked texture should occupy.
+_NO_BAKE_REASONS = {"packed", "generated"}
 _BAKE_CH_SLOT = {"diffuse": "Base Color", "roughness": "Roughness", "metallic": "Metallic",
                  "normal": "Normal", "emissive": "Emission Color"}
 
@@ -256,12 +257,27 @@ def _make_material_baker(tex_dir, ceiling, tex_opts):
         for norm in norms:
             if norm.get("skipped"):
                 continue
-            m = mapper.map_material(norm)
+            # Decide what to bake on the norm AS THE FINAL MAPPING WILL SEE IT: the texture pre-pass
+            # extracts packed / generated images to files before mapping, so treat them as resolved
+            # paths here. Otherwise the mapper stops at "packed" and never sees that a channel is fed
+            # by TWO images (e.g. two layered fabrics, each with its own normal map) -> no bake, and
+            # the final mapping then drops the channel as "needs bake".
+            probe = dict(norm)
+            probe["textures"] = [
+                dict(t, fileKind="path", path=t.get("path") or ("packed:" + str(t.get("name"))))
+                if t.get("fileKind") in _NO_BAKE_REASONS else t
+                for t in (norm.get("textures") or [])]
+            m = mapper.map_material(probe)
             if not m:
                 continue
             chans = []
             for bc in m["report"].get("bakeCandidates", []):
                 ch = bc.get("channel")
+                # A packed / generated image is NOT a reason to render: the texture pre-pass extracts
+                # it losslessly at full resolution. (Baking it re-rendered every texture of an
+                # all-packed .blend through Cycles — downscaled, and black on metal for Base Color.)
+                if bc.get("reason") in _NO_BAKE_REASONS:
+                    continue
                 if ch in _BAKE_CH_SLOT and ch not in chans:
                     chans.append(ch)
             mat = bpy.data.materials.get(norm.get("name"))
@@ -603,6 +619,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         prep = (self._prepare_scene if context.scene.minervha_export_mode == 'SCENE'
                 else self._prepare_materials)(context, name)
         if prep is not None:
+            scene_introspect.cleanup_instance_cache()
             return prep                       # {'CANCELLED'} — a warning was already reported
         return self._start_modal(context)
 
@@ -631,6 +648,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             "keep_normal_png": bool(scene.minervha_tex_normal_png),
             "specular_override": (float(scene.minervha_specular_override)
                                    if scene.minervha_specular_override_enabled else None),
+            "glass_opacity": float(scene.minervha_glass_opacity),
             # Hard rule: cap the longest side at 8192 px (covers source + baked), unless experimental.
             "max_res": export_limits.clamp_max_res(
                 None if mr == 'NONE' else int(mr), _experimental(context)),
@@ -664,13 +682,18 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         if not objs:
             self.report({'WARNING'}, "No objects in the selected scope")
             return {'CANCELLED'}
+        scene_introspect.cleanup_instance_cache()       # fresh depsgraph instance pass per export
         # One exclusion filter feeding materials + obj_export + props, so view-layer-excluded
         # objects don't leak dead materials/OBJs into the bundle (no-op when hierarchy is off).
         objs = scene_introspect.exportable_objects(scope, objs, root_coll, hierarchy)
         if not objs:
             self.report({'WARNING'}, "No objects left after excluding hidden collections")
             return {'CANCELLED'}
-        norms = _scene_materials(objs)
+        # Objects only reachable through collection instances (the instanced collection is often
+        # hidden/excluded): their materials and geometry must ship; their props come from
+        # scene_introspect.collect's instance expansion, so they are NOT passed to it.
+        geo_objs = objs + scene_introspect.instanced_source_objects(objs)
+        norms = _scene_materials(geo_objs)
         _annotate_flip(context, norms)
         norm_objects = scene_introspect.collect(scope, objs, root_collection=root_coll,
                                                 collection_hierarchy=hierarchy)
@@ -692,7 +715,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         # to geometry (obj global_scale) and prop positions — one scene-wide scale, not per-object.
         unit = context.scene.unit_settings.scale_length or 1.0
         world_scale = WL_UNITS_PER_METRE * unit
-        exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(objs),
+        exporter = obj_export.make_obj_exporter(scene_introspect.build_mesh_object_map(geo_objs),
                                                 global_scale=world_scale)
         # Scene-mode bake pre-pass (opt-in): the baker is a generator factory, stepped by the build.
         baker = None
@@ -709,7 +732,7 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
             master_group=bool(context.scene.minervha_master_group),
             enable_collision=bool(context.scene.minervha_enable_collision),
             surface_type=context.scene.minervha_surface_type)
-        self._unused = introspect.unused_materials('COLLECTION', objs)
+        self._unused = introspect.unused_materials('COLLECTION', geo_objs)
         return None
 
     # ── Modal stepping ─────────────────────────────────────────────────────
@@ -804,9 +827,16 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
     def _finish(self, context):
         report = self._report or {}
         report["materialsUnused"] = self._unused or []
+        if self._mode == 'scene':
+            report["instanceStats"] = dict(scene_introspect.LAST_INSTANCE_STATS)
         elapsed = time.monotonic() - self._t_start
         self._write_log(context, report, elapsed, cancelled=False)
         self._cleanup(context)
+        ist = report.get("instanceStats") or {}
+        if ist.get("instancesSkipped"):
+            self.report({'WARNING'}, "%d Geometry Nodes / particle instances NOT exported (over the %d limit "
+                        "— too many props for the game). Reduce the scatter or realize part of it."
+                        % (ist["instancesSkipped"], ist.get("limit", 0)))
         if self._mode == 'scene':
             baked_n = len(report.get('materialsBaked') or [])
             approx_n = len(report.get('materialsApproximated') or [])
@@ -852,6 +882,10 @@ class MINERVHA_OT_export_wlsave(bpy.types.Operator, ExportHelper):
         return {'CANCELLED'}
 
     def _cleanup(self, context):
+        try:
+            scene_introspect.cleanup_instance_cache()   # temp geometry-instance meshes/objects
+        except Exception:
+            pass
         wm = context.window_manager
         if self._timer is not None:
             try:
@@ -1078,6 +1112,7 @@ class MINERVHA_PT_exporter(bpy.types.Panel):
         tex.prop(scene, "minervha_specular_override_enabled")
         if scene.minervha_specular_override_enabled:
             tex.prop(scene, "minervha_specular_override", slider=True)
+        tex.prop(scene, "minervha_glass_opacity", slider=True)
         if scene_mode:
             tex.separator()
             tex.prop(scene, "minervha_bake")
@@ -1197,6 +1232,12 @@ def register():
         name="Specular", default=0.5, min=0.0, max=1.0, soft_min=0.0, soft_max=1.0,
         description="Specular value written to every exported material when 'Override specular' "
                     "is on (matches Wild Life's specular field, 0–1)")
+    bpy.types.Scene.minervha_glass_opacity = FloatProperty(
+        name="Glass opacity", default=0.05, min=0.0, max=1.0, soft_min=0.0, soft_max=0.5,
+        description="In-game opacity of fully transmissive glass (Principled Transmission 1 / Glass "
+                    "BSDF). Wild Life reads a Transparent material's opacity from its colour alpha; "
+                    "0.05 keeps the same see-through contrast as Blender's clear glass (measured in "
+                    "game). Raise it for more visible panes. Partial transmission scales in between")
     bpy.types.Scene.minervha_bake = BoolProperty(
         name="Bake procedural / complex shading", default=True,
         description="Scene mode: bake the channels flagged as bakeCandidates (procedural, "
@@ -1259,7 +1300,7 @@ def unregister():
                  "minervha_tex_prefer_jpg", "minervha_tex_jpg_quality", "minervha_tex_normal_png",
                  "minervha_tex_max_res",
                  "minervha_specular_override_enabled", "minervha_specular_override",
-                 "minervha_bake", "minervha_bake_res", "minervha_flip_green",
+                 "minervha_glass_opacity", "minervha_bake", "minervha_bake_res", "minervha_flip_green",
                  "minervha_collection_hierarchy", "minervha_master_group",
                  "minervha_enable_collision", "minervha_thumbnail_path",
                  "minervha_surface_type"):

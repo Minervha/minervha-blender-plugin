@@ -268,6 +268,233 @@ def _collection_tree(scope, root_collection):
     return _read_layer_tree(master_lc)
 
 
+# ── Collection instances ────────────────────────────────────────────────────
+# An Empty with instance_type == 'COLLECTION' renders the whole instanced collection at its own
+# transform (minus the collection's instance_offset). Wild Life has no instancing, so each instance
+# is EXPANDED: the Empty stays a Group (its transform), and every MESH/EMPTY of the instanced
+# collection becomes a child prop placed in collection space. Meshes keep their datablock as
+# mesh_key, so N instances still share ONE OBJ. Each expanded node gets a namespaced guid_key
+# (instancer path + object name) so the same source object can appear under many instancers.
+_INSTANCE_GUID_PREFIX = "\x00minervha-instance\x00"
+_MAX_INSTANCE_DEPTH = 8
+
+
+def _is_collection_instancer(obj):
+    return (getattr(obj, "type", None) == "EMPTY" and getattr(obj, "instance_type", None) == "COLLECTION"
+            and getattr(obj, "instance_collection", None) is not None)
+
+
+def _matrix_to_transform(mat):
+    loc, quat, scale = mat.decompose()
+    eul = quat.to_euler("XYZ")
+    return ({"location": (loc.x, loc.y, loc.z), "rotation_euler": (eul.x, eul.y, eul.z),
+             "rotation_order": "XYZ", "scale": (scale.x, scale.y, scale.z)}, mat.determinant() < 0)
+
+
+def _expand_instancer(empty, empty_key, depth=0, chain=()):
+    """NormalizedObject[] for the content of the collection instanced by `empty` (bpy).
+    `empty_key` = the guid source of the instancer node (its guid_key or its name)."""
+    coll = empty.instance_collection
+    if depth >= _MAX_INSTANCE_DEPTH or coll.name in chain:
+        return []                                   # recursive instancing guard
+    chain = chain + (coll.name,)
+    members = [o for o in coll.all_objects if o.type in ("MESH", "EMPTY")]
+    names = {o.name for o in members}
+    offset = mathutils.Matrix.Translation(-mathutils.Vector(coll.instance_offset))
+    out = []
+    for o in members:
+        key = _INSTANCE_GUID_PREFIX + empty_key + "/" + o.name
+        parent_in = o.parent is not None and o.parent.name in names
+        n = normalize_object(o, names)
+        mat = o.matrix_local if parent_in else offset @ o.matrix_world
+        n["transform"], mirrored = _matrix_to_transform(mat)
+        if n["kind"] == "mesh":
+            n["validation"]["risky_transform"] = _risky_transform(n["transform"]["scale"], mirrored)
+        n["guid_key"] = key
+        n["parent_name"] = (_INSTANCE_GUID_PREFIX + empty_key + "/" + o.parent.name) if parent_in else empty_key
+        n["instanced_from"] = coll.name
+        out.append(n)
+        if _is_collection_instancer(o):
+            out.extend(_expand_instancer(o, key, depth + 1, chain))
+    return out
+
+
+def expand_collection_instances(norms, objs):
+    """Append the expansion of every collection-instancer Empty in `objs` to `norms` (in place).
+    Returns the number of instancers expanded."""
+    by_name = {o.name: o for o in objs}
+    count = 0
+    for n in list(norms):
+        o = by_name.get(n["name"]) if not n.get("guid_key") else None
+        if o is not None and _is_collection_instancer(o):
+            norms.extend(_expand_instancer(o, n["name"]))
+            count += 1
+    return count
+
+
+# ── Other instancing (Geometry Nodes / particles / instancing on vertices or faces) ─────────────
+# Read from the evaluated depsgraph: Blender lists every rendered instance with its exact world matrix,
+# whatever produced it. Each one becomes a mesh prop parented to its instancer (local = instancer⁻¹ ·
+# instance). Collection-instancer Empties are left to `expand_collection_instances` (it keeps the
+# instanced collection's own hierarchy). Above MAX_DEPSGRAPH_INSTANCES nothing is expanded and the
+# count is reported — a scattered forest can hold far more props than the game holds.
+MAX_DEPSGRAPH_INSTANCES = 10000
+LAST_INSTANCE_STATS = {}
+
+
+def _may_instance(obj):
+    if _is_collection_instancer(obj):
+        return False
+    if getattr(obj, "instance_type", "NONE") in ("VERTS", "FACES"):
+        return True
+    for ps in getattr(obj, "particle_systems", []) or []:
+        if getattr(ps.settings, "render_type", "") in ("OBJECT", "COLLECTION"):
+            return True
+    return any(m.type == "NODES" for m in getattr(obj, "modifiers", []) or [])
+
+
+# One depsgraph pass per export (cached), and the throwaway objects made for GEOMETRY instances.
+# A Geometry Nodes "Instance on Points" fed by Object Info (As Instance OFF — the default) instances
+# a copy of the geometry, not the object: there is no datablock to ship. Each distinct instanced
+# geometry is copied once into a temporary mesh + object (never linked to any scene), shared by all
+# its instances, and removed by `cleanup_instance_cache()` at the end of the export.
+TEMP_GEO_PROP = "_wl_temp_geo"
+_INST_CACHE = {"key": None, "found": [], "unsupported": 0, "total": 0, "temps": []}
+
+
+def cleanup_instance_cache():
+    for obj, me in _INST_CACHE["temps"]:
+        try:
+            if obj.name in bpy.data.objects:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            if me.name in bpy.data.meshes and me.users == 0:
+                bpy.data.meshes.remove(me)
+        except ReferenceError:
+            pass
+    _INST_CACHE.update(key=None, found=[], unsupported=0, total=0, temps=[])
+
+
+def _instance_mesh_of(inst, par):
+    """The object to ship for one instance: the real source object, or None for a geometry instance."""
+    src = inst.object.original
+    if src.type == "MESH" and src != par:
+        return src
+    return None
+
+
+def _depsgraph_instances(objs):
+    """([(instancer_name, source_object, world_matrix, persistent_id)], unsupported, total) for the
+    in-scope non-collection instancers. `total` = every mesh instance seen (the limit applies to it);
+    over the limit nothing is materialized. Cached until `cleanup_instance_cache()`."""
+    key = frozenset(o.name for o in objs if _may_instance(o))
+    if _INST_CACHE["key"] == key:
+        return _INST_CACHE["found"], _INST_CACHE["unsupported"], _INST_CACHE["total"]
+    cleanup_instance_cache()
+    _INST_CACHE["key"] = key
+    if not key:
+        return [], 0, 0
+    dg = bpy.context.evaluated_depsgraph_get()
+    total = sum(1 for i in dg.object_instances if i.is_instance and i.parent is not None
+                and i.parent.original.name in key and i.object.type == "MESH")
+    _INST_CACHE["total"] = total
+    if total > MAX_DEPSGRAPH_INSTANCES:
+        return [], 0, total
+    found, unsupported, geo = [], 0, {}
+    for inst in dg.object_instances:
+        if not inst.is_instance or inst.parent is None:
+            continue
+        par = inst.parent.original
+        if par.name not in key:
+            continue
+        if inst.object.type != "MESH":
+            unsupported += 1
+            continue
+        src = _instance_mesh_of(inst, par)
+        if src is None:
+            ptr = inst.object.data.as_pointer()
+            src = geo.get(ptr)
+            if src is None:
+                try:
+                    # Copy the INSTANCE's geometry (inst.object.data). new_from_object() would rebuild
+                    # the instancer's own (empty, instances-only) mesh instead — measured: 0 faces.
+                    me = inst.object.data.copy()
+                except Exception:
+                    unsupported += 1
+                    continue
+                me.name = "%s_instance%d" % (par.name, len(geo) + 1)
+                src = bpy.data.objects.new(me.name, me)
+                src[TEMP_GEO_PROP] = True
+                geo[ptr] = src
+                _INST_CACHE["temps"].append((src, me))
+        found.append((par.name, src, inst.matrix_world.copy(), tuple(inst.persistent_id)))
+    _INST_CACHE["found"], _INST_CACHE["unsupported"] = found, unsupported
+    return found, unsupported, total
+
+
+def expand_depsgraph_instances(norms, objs, limit=None):
+    """Append a mesh prop per GN / particle / vertex-face instance of the in-scope objects (in place).
+    Also hides an instancer Blender does not render itself, and drops the template children of a
+    VERTS/FACES instancer (Blender does not render those either). Returns the stats dict."""
+    limit = MAX_DEPSGRAPH_INSTANCES if limit is None else limit
+    stats = {"instances": 0, "instancesSkipped": 0, "unsupported": 0, "limit": limit}
+    found, stats["unsupported"], total = _depsgraph_instances(objs)
+    by_name = {o.name: o for o in objs}
+    # Template children of a vertex/face instancer are not rendered by Blender -> no prop of their own.
+    templates = {o.name for o in objs if o.parent is not None
+                 and getattr(o.parent, "instance_type", "NONE") in ("VERTS", "FACES")
+                 and o.parent.name in by_name}
+    if templates:
+        norms[:] = [n for n in norms if n.get("guid_key") or n["name"] not in templates]
+    if total > limit:
+        stats["instancesSkipped"] = total
+        return stats
+    instancers = {f[0] for f in found}
+    for n in norms:
+        o = by_name.get(n["name"]) if not n.get("guid_key") else None
+        if o is not None and o.name in instancers and not getattr(o, "show_instancer_for_render", True):
+            n["visible"] = False
+    for par_name, src, mw, pid in found:
+        par = by_name[par_name]
+        n = normalize_object(src, set())
+        n["transform"], mirrored = _matrix_to_transform(par.matrix_world.inverted_safe() @ mw)
+        n["validation"]["risky_transform"] = _risky_transform(n["transform"]["scale"], mirrored)
+        n["guid_key"] = _INSTANCE_GUID_PREFIX + par_name + "#" + "-".join(str(i) for i in pid)
+        n["parent_name"] = par_name
+        n["visible"] = True
+        n["instanced_from"] = par_name
+        norms.append(n)
+    stats["instances"] = len(found)
+    return stats
+
+
+def instanced_source_objects(objs):
+    """The real bpy MESH objects reachable through collection instancing from `objs` (recursive),
+    not already in `objs` — fed to material introspection and the OBJ exporter so instanced
+    geometry and its materials ship even when the source collection is hidden/excluded."""
+    have = {o.name for o in objs}
+    out, seen_colls = [], set()
+    stack = [o for o in objs if _is_collection_instancer(o)]
+    while stack:
+        e = stack.pop()
+        coll = e.instance_collection
+        if coll.name in seen_colls:
+            continue
+        seen_colls.add(coll.name)
+        for o in coll.all_objects:
+            if o.type == "MESH" and o.name not in have:
+                have.add(o.name)
+                out.append(o)
+            if _is_collection_instancer(o):
+                stack.append(o)
+    # Sources of GN / particle / vertex-face instances (often hidden objects or in another collection).
+    found, _, _ = _depsgraph_instances(objs)   # empty when over the limit (not expanded, not shipped)
+    for _, src, _, _ in found:
+        if src.name not in have:
+            have.add(src.name)
+            out.append(src)
+    return out
+
+
 def collect(scope="SCENE", objects=None, root_collection=None, collection_hierarchy=False):
     """Return NormalizedObject[] for the scope (UI passes the resolved object list).
 
@@ -281,6 +508,10 @@ def collect(scope="SCENE", objects=None, root_collection=None, collection_hierar
         objs = collect_objects(scope, objects)
         in_scope = {o.name for o in objs}
         norms = [normalize_object(o, in_scope) for o in objs]
+        if bpy is not None:
+            expand_collection_instances(norms, objs)
+            LAST_INSTANCE_STATS.clear()
+            LAST_INSTANCE_STATS.update(expand_depsgraph_instances(norms, objs))
         _assign_child_indices(norms)
         return norms
 
@@ -295,6 +526,9 @@ def collect(scope="SCENE", objects=None, root_collection=None, collection_hierar
         if n["name"] in reparent:
             n["parent_name"] = reparent[n["name"]]
     norms = object_norms + group_norms
+    expand_collection_instances(norms, objs)
+    LAST_INSTANCE_STATS.clear()
+    LAST_INSTANCE_STATS.update(expand_depsgraph_instances(norms, objs))
     _assign_child_indices(norms)
     return norms
 

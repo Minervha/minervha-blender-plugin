@@ -70,9 +70,11 @@ def gather_scene_budget(objects):
 
 def _iter_image_nodes(node_tree, seen_trees):
     """Yield the bpy Image of every TEX_IMAGE node in `node_tree`, recursing into node groups."""
-    if node_tree is None or id(node_tree) in seen_trees:
+    # as_pointer(), not id(): bpy wrappers are rebuilt per access, so a freed wrapper's id() can be
+    # reused by another tree and wrongly look "seen".
+    if node_tree is None or node_tree.as_pointer() in seen_trees:
         return
-    seen_trees.add(id(node_tree))
+    seen_trees.add(node_tree.as_pointer())
     for node in node_tree.nodes:
         if node.type == "TEX_IMAGE" and node.image is not None:
             yield node.image

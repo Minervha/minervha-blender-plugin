@@ -163,7 +163,7 @@ def _material_uses_alpha(norm):
     RGB diffuse bake (no alpha) silently drops the mask, so foliage/glass render as solid quads.
     Pure transmission/refraction glass (Alpha = 1, unlinked) returns False — its transparency is
     refractive, not a diffuse mask."""
-    if norm.get("alphaLinked"):
+    if norm.get("alphaLinked") or norm.get("separateAlphaMask"):
         return True
     a = norm.get("alpha")
     return a is not None and float(a) < 0.9999      # ≠ 1 (small margin ignores float noise)
@@ -404,6 +404,7 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, sur
                                                    max_res=opts.get("max_res"),
                                                    keep_normal_png=bool(opts.get("keep_normal_png")))
     specular_override = opts.get("specular_override")
+    glass_opacity = opts.get("glass_opacity", mapper.DEFAULT_GLASS_OPACITY)
 
     # Per-texture "what didn't make it, on which mesh, and why" detail (grouped by texture).
     #   missing:       (texture, reason) -> {texture, reason, materials/channels/objects: set}
@@ -436,7 +437,8 @@ def _iter_build_material_entries(norms, name, report, tmpdir, tex_opts=None, sur
     for mi, norm in enumerate(norms, 1):
         if mi % 128 == 0:
             yield ("map", mi, n_norms)
-        m = mapper.map_material(norm, surface_type, specular_override=specular_override)
+        m = mapper.map_material(norm, surface_type, specular_override=specular_override,
+                                glass_opacity=glass_opacity)
         if not m:
             report["skipped"].append(norm.get("name"))
             continue
@@ -787,6 +789,12 @@ def format_export_log(report, *, mode="scene", scope="", level="", options="", d
                 len(report["materialsBaked"]), len(report.get("materialsApproximated") or [])))
         if report.get("bakeFailed"):
             add("  Bakes failed: %d (channels left un-baked — see detail below)" % len(report["bakeFailed"]))
+        ist = report.get("instanceStats") or {}
+        if ist.get("instances") or ist.get("instancesSkipped") or ist.get("unsupported"):
+            add("  Instances (Geometry Nodes / particles / vertex-face): %d exported, %d skipped over the "
+                "%d limit, %d without an object of their own (not exportable)"
+                % (ist.get("instances", 0), ist.get("instancesSkipped", 0), ist.get("limit", 0),
+                   ist.get("unsupported", 0)))
         add("  Master group: %s   Collisions: %s   Thumbnail: %s" % (
             report.get("masterGroup") or "no",
             "on" if report.get("enableCollision") else "off",

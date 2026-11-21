@@ -12,6 +12,17 @@ import math
 import bpy
 
 
+def _ptr(rna):
+    """Stable identity for a bpy struct (socket / node tree) in a visited-set. NEVER use id():
+    Blender builds a NEW Python wrapper on every attribute access, so a wrapper freed after it was
+    visited can hand its id() to a different socket created later -> that socket is wrongly seen as
+    'already visited' and the walk stops (a normal map traced to no slot at all)."""
+    try:
+        return rna.as_pointer()
+    except AttributeError:
+        return id(rna)
+
+
 def build_local_parent_map(root_tree):
     """Map each nested node-group tree -> list of (group_node, containing_tree)."""
     parent_map = {}
@@ -37,7 +48,7 @@ def trace_from_texture(texture_node, node_tree, parent_map):
     visited = set()
     while stack:
         socket, tree = stack.pop()
-        key = (id(tree), id(socket))
+        key = (_ptr(tree), _ptr(socket))
         if key in visited:
             continue
         visited.add(key)
@@ -106,7 +117,7 @@ def direct_slots_from_texture(texture_node, node_tree, parent_map):
     visited = set()
     while stack:
         socket, tree, transformed = stack.pop()
-        key = (id(tree), id(socket), transformed)
+        key = (_ptr(tree), _ptr(socket), transformed)
         if key in visited:
             continue
         visited.add(key)
@@ -120,6 +131,14 @@ def direct_slots_from_texture(texture_node, node_tree, parent_map):
                (tn.type == 'OUTPUT_MATERIAL' and ts.name == 'Displacement'):
                 if not transformed:
                     found.add('Height')
+                continue
+            # A Bump layered on a Normal Map (Bump.Normal <- Normal Map, the DAZ / common PBR setup)
+            # leaves the normal map the channel's data: its height goes to the separate WL height slot
+            # (the Bump's Height input, traced above). Baking the combination would add the relief twice
+            # and at a bump distance tied to the bake plane's size, not the real mesh's.
+            if tn.type == 'BUMP' and ts.name == 'Normal':
+                for out in tn.outputs:
+                    stack.append((out, tree, transformed))
                 continue
             if tn.type == 'GROUP':                       # structural — preserve `transformed`
                 gt = tn.node_tree
@@ -199,7 +218,7 @@ def find_mapping_for_texture(tex_node, node_tree, parent_map):
     visited = set()
     while stack:
         socket, tree = stack.pop()
-        key = (id(tree), id(socket))
+        key = (_ptr(tree), _ptr(socket))
         if key in visited:
             continue
         visited.add(key)
@@ -247,7 +266,7 @@ def texture_is_projection_mapped(tex_node, node_tree, parent_map):
     visited = set()
     while stack:
         socket, tree = stack.pop()
-        key = (id(tree), id(socket))
+        key = (_ptr(tree), _ptr(socket))
         if key in visited:
             continue
         visited.add(key)
@@ -291,9 +310,9 @@ def first_bump_strength(node_tree, _seen=None):
     node rather than a Normal Map node."""
     if _seen is None:
         _seen = set()
-    if node_tree is None or id(node_tree) in _seen:
+    if node_tree is None or _ptr(node_tree) in _seen:
         return None
-    _seen.add(id(node_tree))
+    _seen.add(_ptr(node_tree))
     for n in node_tree.nodes:
         if n.type == "BUMP":
             s = n.inputs.get("Strength")
@@ -420,7 +439,7 @@ def _resolve_input(socket, tree, parent_map):
     while True:
         if not cur.is_linked:
             return (False, _socket_scalar(cur))
-        key = (id(ctree), id(cur))
+        key = (_ptr(ctree), _ptr(cur))
         if key in seen:
             return (True, None)
         seen.add(key)
@@ -456,7 +475,7 @@ def _resolve_color(socket, tree, parent_map):
     while True:
         if not cur.is_linked:
             return _socket_color(cur)
-        key = (id(ctree), id(cur))
+        key = (_ptr(ctree), _ptr(cur))
         if key in seen:
             return None
         seen.add(key)
@@ -556,6 +575,102 @@ def _read_refractive(node, tree, parent_map, out):
                 out["refractiveRoughness"] = val
 
 
+def _to_top_level(socket, tree, mat_tree, parent_map):
+    """Resolve an INPUT socket inside a (possibly nested) group to the output socket that feeds it in
+    the material's top-level tree, following Group Input -> the group node's input in its parent.
+    Returns that from_socket, or None (unlinked = constant, or not resolvable to the top level)."""
+    for _ in range(16):
+        if socket is None or not socket.is_linked:
+            return None
+        link = socket.links[0]
+        node = link.from_node
+        while node.type == 'REROUTE':
+            if not node.inputs[0].is_linked:
+                return None
+            link = node.inputs[0].links[0]
+            node = link.from_node
+        if node.type != 'GROUP_INPUT':
+            return link.from_socket if tree == mat_tree else None
+        idx = next((i for i, o in enumerate(node.outputs) if o == link.from_socket), None)
+        parents = parent_map.get(tree, [])
+        if idx is None or not parents:
+            return None
+        p_node, p_tree = parents[0]
+        if idx >= len(p_node.inputs):
+            return None
+        socket, tree = p_node.inputs[idx], p_tree
+    return None
+
+
+def _shader_source_type(socket, tree, parent_map):
+    """Type of the shader node that ultimately feeds INPUT `socket`, following reroutes, node groups
+    (into a group through its active Group Output) and Group Inputs (out to the parent group node's
+    input). None if unlinked / unresolvable. Lets a Transparent BSDF be recognised even when a group
+    sits between it and the Mix Shader."""
+    for _ in range(32):
+        if socket is None or not socket.is_linked:
+            return None
+        link = socket.links[0]
+        node = link.from_node
+        if node.type == 'REROUTE':
+            socket = node.inputs[0]
+            continue
+        if node.type == 'GROUP' and node.node_tree:
+            go = _active_group_output(node.node_tree)
+            idx = next((i for i, o in enumerate(node.outputs) if o == link.from_socket), None)
+            if go is None or idx is None or idx >= len(go.inputs):
+                return None
+            socket, tree = go.inputs[idx], node.node_tree
+            continue
+        if node.type == 'GROUP_INPUT':
+            idx = next((i for i, o in enumerate(node.outputs) if o == link.from_socket), None)
+            parents = parent_map.get(tree, [])
+            if idx is None or not parents or idx >= len(parents[0][0].inputs):
+                return None
+            p_node, p_tree = parents[0]
+            socket, tree = p_node.inputs[idx], p_tree
+            continue
+        return node.type
+    return None
+
+
+def find_alpha_mask(mat_tree, parent_map):
+    """Where the material's opacity mask comes from, as (source_socket_in_top_tree, invert) or None.
+
+    Two shapes, first found wins:
+      - a Principled BSDF Alpha input that is linked (top-level Principled);
+      - a Mix Shader whose Fac is linked and that mixes a Transparent BSDF against another shader
+        (the DAZ "Transparent" group / hand-made cutout), even inside a node group. Mix output =
+        in1*(1-f) + in2*f, so Transparent on in1 -> alpha = f; on in2 -> alpha = 1 - f (invert).
+    The socket is in `mat_tree` so the baker can route it through an Emission."""
+    for n in mat_tree.nodes:
+        if n.type == 'BSDF_PRINCIPLED':
+            a = n.inputs.get('Alpha')
+            if a is not None and a.is_linked:
+                src = _to_top_level(a, mat_tree, mat_tree, parent_map)
+                if src is not None:
+                    return src, False
+    seen = set()
+    stack = [mat_tree]
+    while stack:
+        tree = stack.pop()
+        if _ptr(tree) in seen:
+            continue
+        seen.add(_ptr(tree))
+        for n in tree.nodes:
+            if n.type == 'GROUP' and n.node_tree:
+                stack.append(n.node_tree)
+            if n.type != 'MIX_SHADER' or len(n.inputs) < 3 or not n.inputs[0].is_linked:
+                continue
+            kinds = [_shader_source_type(n.inputs[i], tree, parent_map) for i in (1, 2)]
+            if 'BSDF_TRANSPARENT' not in kinds or kinds[0] == kinds[1]:
+                continue
+            src = _to_top_level(n.inputs[0], tree, mat_tree, parent_map)
+            if src is not None:
+                return src, kinds[1] == 'BSDF_TRANSPARENT'
+    return None
+
+
 def trace_surface_shaders(mat_tree, parent_map):
     """Walk backward from the active Material Output's Surface, through Reroute /
     Mix / Add / GROUP / GROUP_INPUT / GROUP_OUTPUT, collecting the effective shader
@@ -587,7 +702,7 @@ def trace_surface_shaders(mat_tree, parent_map):
     visited = set()
     while stack:
         socket, tree = stack.pop()
-        key = (id(tree), id(socket))
+        key = (_ptr(tree), _ptr(socket))
         if key in visited:
             continue
         visited.add(key)

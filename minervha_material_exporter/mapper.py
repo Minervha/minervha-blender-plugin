@@ -82,7 +82,11 @@ CHANNEL_TO_FIELD = {
 }
 
 
-def map_material(norm, surface_type="SurfaceType_Default", specular_override=None):
+DEFAULT_GLASS_OPACITY = 0.05   # in-game opacity of clear glass (see map_material: glass branch)
+
+
+def map_material(norm, surface_type="SurfaceType_Default", specular_override=None,
+                 glass_opacity=DEFAULT_GLASS_OPACITY):
     """norm -> ({"entry": customMaterials entry, "report": ...}) | None (skipped material).
 
     `specular_override` (None = off) forces every exported material's `specular` field to this
@@ -161,6 +165,13 @@ def map_material(norm, surface_type="SurfaceType_Default", specular_override=Non
     for ch in (norm.get("multiTextureChannels") or []):
         report["notes"].append(f"{ch}: blended from multiple textures — bake to flatten")
         _bake_candidate(ch, "multi-texture")
+
+    # Opacity mask living outside the Base Color image (separate opacity map / Mix Shader cutout): WL
+    # takes the mask from the diffuse texture's alpha, so the diffuse must be baked carrying it. Not a
+    # drop reason — with Bake off the direct diffuse is still shipped (mask lost, reported).
+    if norm.get("separateAlphaMask"):
+        report["notes"].append("diffuse: opacity mask is not in the Base Color image's alpha — bake to carry it")
+        _bake_candidate("diffuse", "alpha-mask")
 
     # Don't ship a single guessed texture for a channel that genuinely needs baking — a blend of >=2
     # images (multi-texture) or a procedural / transformed graph. A BAKED texture is faithful and kept;
@@ -301,6 +312,16 @@ def map_material(norm, surface_type="SurfaceType_Default", specular_override=Non
     # A constant (unlinked) sub-1 Alpha sets the whole-surface opacity.
     if is_transparent and _is_num(norm.get("alpha")) and alpha_scalar < 1:
         color["a"] = clamp01(alpha_scalar)
+    # Glass that is see-through by TRANSMISSION (Alpha stays 1): WL takes a Transparent material's
+    # opacity from color.a, so a=1 rendered every window as an opaque milky pane. Map transmission to
+    # opacity: full transmission -> `glass_opacity`. Calibrated in game 2026-11-21 (checker board behind
+    # panes of a = 0 / 0.05 / 0.1 / 0.15 / 0.25 / 0.4 vs a Cycles render of the same clear glass): Blender
+    # keeps 89% of the contrast, the game 84% at 0.05, 69% at 0.1, 58% at 0.15 -> default 0.05.
+    elif is_transparent and (has_glass or transmission > 0):
+        t = 1.0 if has_glass and transmission <= 0 else clamp01(transmission)
+        g = clamp01(glass_opacity if _is_num(glass_opacity) else DEFAULT_GLASS_OPACITY)
+        color["a"] = round(clamp01(1.0 - (1.0 - g) * t), 4)
+        report["notes"].append("glass opacity from transmission -> color.a %.2f" % color["a"])
 
     # refraction: real IOR only when Transparent. Prefer the (group-resolved)
     # refractive-node IOR, else the Principled IOR; clamp [1,3]. Fallback is 1.45
@@ -367,6 +388,15 @@ def map_material(norm, surface_type="SurfaceType_Default", specular_override=Non
         "textureMovement": {"x": 0, "y": 0, "z": 0},
         "refraction": refraction,
     }
+
+    # WL MULTIPLIES a roughness / metallic texture by the scalar field (measured in game 2026-11-21:
+    # texture 128 x 1.0 renders like scalar 0.5; texture 128 x 0.5 renders ~0.25 — the "wet" look;
+    # the player corpus agrees: 718/950 textured roughness and 284/400 textured metallic keep 1).
+    # So a shipped texture carries the value itself and the scalar must be the neutral 1.0 — the old
+    # 0.5 default halved every textured roughness, and metallic 0 nulled every metallic map.
+    for ch in ("roughness", "metallic"):
+        if ch in channel_tex:
+            entry[ch] = 1.0
 
     textures = [
         {

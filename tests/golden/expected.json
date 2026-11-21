@@ -76,7 +76,7 @@
       },
       "metallic": 0.0,
       "specular": 0.5,
-      "roughness": 0.5,
+      "roughness": 1.0,
       "normalMapAmplification": 1,
       "emissiveColor": {
         "r": 0,
@@ -554,7 +554,7 @@
       },
       "metallic": 0.0,
       "specular": 0.5,
-      "roughness": 0.5,
+      "roughness": 1.0,
       "normalMapAmplification": 0.75,
       "emissiveColor": {
         "r": 0,
@@ -702,7 +702,7 @@
         "r": 0.9,
         "g": 0.95,
         "b": 1.0,
-        "a": 1
+        "a": 0.145
       },
       "metallic": 0.0,
       "specular": 0.5,
@@ -742,7 +742,9 @@
       "name": "GlassTransmission",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": [],
+      "notes": [
+        "glass opacity from transmission -> color.a 0.14"
+      ],
       "bakeCandidates": [],
       "needsBake": []
     }
@@ -822,9 +824,9 @@
         "b": 0.35,
         "a": 1
       },
-      "metallic": 0.8,
+      "metallic": 1.0,
       "specular": 0.2,
-      "roughness": 0.25,
+      "roughness": 1.0,
       "normalMapAmplification": 2.0,
       "emissiveColor": {
         "r": 0,
@@ -971,7 +973,7 @@
         "r": 0.9,
         "g": 0.95,
         "b": 1.0,
-        "a": 1
+        "a": 0.05
       },
       "metallic": 0.0,
       "specular": 0.5,
@@ -1011,7 +1013,9 @@
       "name": "GlassNode",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": [],
+      "notes": [
+        "glass opacity from transmission -> color.a 0.05"
+      ],
       "bakeCandidates": [],
       "needsBake": []
     }
@@ -1030,7 +1034,7 @@
         "r": 0.8,
         "g": 0.9,
         "b": 1.0,
-        "a": 1
+        "a": 0.05
       },
       "metallic": 0.0,
       "specular": 0.5,
@@ -1070,7 +1074,9 @@
       "name": "GlassGroupIor",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": [],
+      "notes": [
+        "glass opacity from transmission -> color.a 0.05"
+      ],
       "bakeCandidates": [],
       "needsBake": []
     }
@@ -1089,7 +1095,7 @@
         "r": 1.0,
         "g": 1.0,
         "b": 1.0,
-        "a": 1
+        "a": 0.05
       },
       "metallic": 0.0,
       "specular": 0.5,
@@ -1129,7 +1135,9 @@
       "name": "RefractionDiamond",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": [],
+      "notes": [
+        "glass opacity from transmission -> color.a 0.05"
+      ],
       "bakeCandidates": [],
       "needsBake": []
     }
@@ -1148,7 +1156,7 @@
         "r": 1.0,
         "g": 1.0,
         "b": 1.0,
-        "a": 1
+        "a": 0.05
       },
       "metallic": 0.0,
       "specular": 0.5,
@@ -1188,7 +1196,9 @@
       "name": "RefractionClamped",
       "ignoredSlots": [],
       "unresolvedTextures": [],
-      "notes": [],
+      "notes": [
+        "glass opacity from transmission -> color.a 0.05"
+      ],
       "bakeCandidates": [],
       "needsBake": []
     }
@@ -2279,9 +2289,9 @@
         "b": 0.8,
         "a": 1
       },
-      "metallic": 0.0,
+      "metallic": 1.0,
       "specular": 0.5,
-      "roughness": 0.5,
+      "roughness": 1.0,
       "normalMapAmplification": 1,
       "emissiveColor": {
         "r": 0,

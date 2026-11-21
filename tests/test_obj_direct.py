@@ -76,6 +76,24 @@ def test_two_material_sections():
     assert "f 1/5 2/6 3/7 4/8" in L
 
 
+def test_sections_follow_slot_order_not_face_order():
+    # Wellness Center column: the mesh's FIRST face is on slot 1 (lattice sleeve) and faces interleave
+    # 1,0,1,0. Sections must still come out Shaft (slot 0) then Sleeve (slot 1), one section each —
+    # WL maps sections to CustomMaterial{i} by order, so face order swapped the two materials.
+    a = _quad(slots=("Shaft", "Sleeve"), mat_index=(1, 0, 1, 0))
+    a["loop_start"] = [0, 4, 8, 12]; a["loop_total"] = [4, 4, 4, 4]
+    a["loop_verts"] = [0, 1, 2, 3] * 4
+    a["uvs"] = [(0, 0)] * 16; a["normals"] = None
+    L = _lines(obj_export.format_obj_text(a, None))
+    assert L.count("usemtl Shaft") == 1 and L.count("usemtl Sleeve") == 1
+    i_shaft, i_sleeve = L.index("usemtl Shaft"), L.index("usemtl Sleeve")
+    assert i_shaft < i_sleeve
+    faces = [x for x in L if x.startswith("f ")]
+    # shaft section holds the slot-0 faces (2nd and 4th: loops 5..8 and 13..16), in mesh order
+    assert faces[0] == "f 1/5 2/6 3/7 4/8" and faces[1] == "f 1/13 2/14 3/15 4/16"
+    assert faces[2] == "f 1/1 2/2 3/3 4/4" and faces[3] == "f 1/9 2/10 3/11 4/12"
+
+
 def test_empty_slot_emits_empty_name_not_None():
     # parity with wm.obj_export: an empty slot keeps its empty name (the section ORDER is what WL
     # maps to CustomMaterial{i}); we must never invent a "None" section.

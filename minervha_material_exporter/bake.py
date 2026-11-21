@@ -28,18 +28,33 @@ try:
 except ImportError:                 # importable for syntax check without Blender
     bpy = None
 
+if bpy is not None:
+    try:
+        from . import bsdf_trace        # packaged extension
+    except ImportError:
+        import bsdf_trace               # flat import (tests / headless probes)
+else:
+    bsdf_trace = None
+
 
 # channel -> (cycles bake type, target colorspace, Principled input to EMIT-rewire | None).
 # A None rewire-input means a native Cycles pass reads the whole shader (Surface left intact);
 # a named input means that input's *source graph* is routed through an Emission and baked EMIT
 # (the universal flattener for inputs with no dedicated pass — e.g. Metallic).
+# Base Color and Roughness are EMIT-rewired too: the DIFFUSE/COLOR pass is the *diffuse* albedo, which
+# Cycles zeroes where Metallic = 1 (a metal baked BLACK), and the ROUGHNESS pass ignored a Math node
+# scaling the roughness texture (DAZ's `tex x 0.45` came out as the raw texture). EMIT of the input's
+# own graph is exact for both.
 _CHANNEL_BAKE = {
-    "diffuse":   ("DIFFUSE",   "sRGB",      None),
-    "roughness": ("ROUGHNESS", "Non-Color", None),
+    "diffuse":   ("EMIT",      "sRGB",      "Base Color"),
+    "roughness": ("EMIT",      "Non-Color", "Roughness"),
     "metallic":  ("EMIT",      "Non-Color", "Metallic"),
     "normal":    ("NORMAL",    "Non-Color", None),
     "emissive":  ("EMIT",      "sRGB",      None),
 }
+# Native pass used when the material holds no Principled at all (Diffuse / Glossy / custom shader) —
+# the EMIT substitute (_EmitSubstitute, any group depth / mixed Principled) has nothing to read.
+_NATIVE_FALLBACK = {"diffuse": "DIFFUSE", "roughness": "ROUGHNESS"}
 
 
 def can_bake():
@@ -128,6 +143,25 @@ def _active_output(mat):
     return outs[0]
 
 
+def _uv_names_used(node_tree, seen=None):
+    """Sorted UV layer names referenced by name in `node_tree` (and its groups): Normal Map
+    (tangent space), UV Map and Tangent (UV map mode) nodes. Empty names = the default layer."""
+    seen = seen if seen is not None else set()
+    names = set()
+    if node_tree is None or node_tree.as_pointer() in seen:
+        return []
+    seen.add(node_tree.as_pointer())
+    for n in node_tree.nodes:
+        name = None
+        if n.type in ("NORMAL_MAP", "UVMAP", "TANGENT"):
+            name = getattr(n, "uv_map", None)
+        if name:
+            names.add(name)
+        if n.type == "GROUP" and getattr(n, "node_tree", None) is not None:
+            names.update(_uv_names_used(n.node_tree, seen))
+    return sorted(names)
+
+
 @contextmanager
 def placeholder_plane(mat, scene):
     """Yield a throwaway unit plane whose UV map fills the WHOLE [0,1]² tile, carrying only `mat`,
@@ -141,9 +175,13 @@ def placeholder_plane(mat, scene):
     mesh.from_pydata([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)],
                      [], [(0, 1, 2, 3)])
     mesh.update()
-    uv = mesh.uv_layers.new(name="UVMap")
-    for loop_idx, co in enumerate([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]):
-        uv.data[loop_idx].uv = co
+    # One identical full-tile UV layer per UV name the material asks for: a Normal Map / UV Map /
+    # Tangent node bound to a NAMED layer ("Default UVs" from the DAZ importer, "UVMap.001"...) finds
+    # no such layer on a plane that only has "UVMap" -> no tangents -> the normal bakes FLAT.
+    for uv_name in ["UVMap"] + [n for n in _uv_names_used(mat.node_tree) if n != "UVMap"]:
+        uv = mesh.uv_layers.new(name=uv_name)
+        for loop_idx, co in enumerate([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]):
+            uv.data[loop_idx].uv = co
     mesh.materials.append(mat)
     obj = bpy.data.objects.new("_wl_bake_plane", mesh)
     obj.hide_render = False
@@ -187,22 +225,17 @@ def _bake_into(plane, mat, img, bake_type, scene, **kw):
         nt.nodes.remove(node)
 
 
-def _emit_rewire(mat, input_name):
-    """Route the source feeding a Principled input through a temporary Emission -> Surface so an
-    EMIT bake captures that input's graph. Returns a restore() callable (idempotent). If the input
-    is unlinked (a constant) returns None — the caller writes the scalar instead of baking."""
-    pr = _principled_of(mat)
+def _emit_rewire_socket(mat, src_socket):
+    """Route an arbitrary top-level output socket through a temporary Emission -> Surface (EMIT
+    bake of that socket's graph). Returns an idempotent restore() callable, or None."""
     out = _active_output(mat)
-    if pr is None or out is None:
-        return None
-    inp = pr.inputs.get(input_name)
-    if inp is None or not inp.is_linked:
+    if out is None or src_socket is None:
         return None
     nt = mat.node_tree
     surf = out.inputs["Surface"]
     stash = surf.links[0].from_socket if surf.is_linked else None
     emit = nt.nodes.new("ShaderNodeEmission")
-    nt.links.new(inp.links[0].from_socket, emit.inputs["Color"])
+    nt.links.new(src_socket, emit.inputs["Color"])
     nt.links.new(emit.outputs["Emission"], surf)
 
     def restore():
@@ -214,7 +247,8 @@ def _emit_rewire(mat, input_name):
 
 
 def _bake_alpha_into(plane, mat, img, scene):
-    """Fill RGBA `img`'s ALPHA channel from the material's Principled Alpha input, so a baked
+    """Fill RGBA `img`'s ALPHA channel from the material's opacity mask (Principled Alpha, or a Mix
+    Shader Transparent-vs-BSDF cutout such as the DAZ "Transparent" group), so a baked
     Base Color carries its transparency mask (otherwise a Masked/alpha-tested look is lost — the
     flat RGB diffuse bake has no mask). A LINKED Alpha is EMIT-baked (captures the mask graph /
     cutoff via the node tree); a CONSTANT Alpha fills a flat value. Vectorized via numpy (a Python
@@ -226,16 +260,21 @@ def _bake_alpha_into(plane, mat, img, scene):
     n = len(img.pixels)
     a = np.empty(n, dtype=np.float32)
     img.pixels.foreach_get(a)
-    if inp is not None and inp.is_linked:
+    # The mask source: Principled Alpha OR a Mix Shader cutout (Transparent vs BSDF, e.g. the DAZ
+    # "Transparent" group) — see bsdf_trace.find_alpha_mask.
+    mask = bsdf_trace.find_alpha_mask(mat.node_tree, bsdf_trace.build_local_parent_map(mat.node_tree))
+    if mask is not None:
+        src, invert = mask
         tmp = bpy.data.images.new("_bake_alpha_tmp", img.size[0], img.size[1], alpha=False)
         tmp.colorspace_settings.name = "Non-Color"
-        restore = _emit_rewire(mat, "Alpha")
+        restore = _emit_rewire_socket(mat, src)
         try:
             if restore is not None:
                 _bake_into(plane, mat, tmp, "EMIT", scene)
                 b = np.empty(len(tmp.pixels), dtype=np.float32)
                 tmp.pixels.foreach_get(b)
-                a[3::4] = b[0::4]                       # EMIT red = alpha -> target A channel
+                m = np.clip(b[0::4], 0.0, 1.0)
+                a[3::4] = (1.0 - m) if invert else m    # EMIT red = mask -> target A channel
         finally:
             if restore is not None:
                 restore()
@@ -275,22 +314,32 @@ def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_qua
         image_format = "PNG"                           # an alpha mask cannot survive JPEG
     img = bpy.data.images.new(f"_bake_{mat.name}_{channel}", resolution, resolution, alpha=want_alpha)
     img.colorspace_settings.name = colorspace          # encodes the PNG on save (buffer is linear)
-    restore = None
+    sub = None
     try:
         kw = {}
+        bake_mat = mat
         if rewire_input is not None:
-            restore = _emit_rewire(mat, rewire_input)
-            if restore is None:
+            # Bake a throwaway COPY where every Principled (groups included) emits this input: exact
+            # for nested / mixed Principled, and the user's material and shared groups are untouched.
+            sub = _emit_substitute(mat, rewire_input)
+            if sub.material is not None:
+                bake_mat = sub.material
+            elif sub.constant:
                 return None                            # constant input -> mapper writes the scalar
-        elif bake_type == "DIFFUSE":
+            else:
+                # No Principled at all (Diffuse / Glossy / custom shader): the native pass reads it.
+                bake_type = _NATIVE_FALLBACK.get(channel)
+                if bake_type is None:
+                    return None
+        if bake_type == "DIFFUSE":
             kw["pass_filter"] = {"COLOR"}              # albedo only, no lighting
         elif bake_type == "NORMAL":
             kw["normal_space"] = "TANGENT"
 
-        with placeholder_plane(mat, scene) as plane:
-            _bake_into(plane, mat, img, bake_type, scene, **kw)
+        with placeholder_plane(bake_mat, scene) as plane:
+            _bake_into(plane, bake_mat, img, bake_type, scene, **kw)
             if want_alpha:
-                _bake_alpha_into(plane, mat, img, scene)   # composite the mask into the A channel
+                _bake_alpha_into(plane, bake_mat, img, scene)   # composite the mask into the A channel
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         img.filepath_raw = out_path
@@ -301,10 +350,91 @@ def bake_channel(mat, channel, resolution, out_path, image_format="PNG", jpg_qua
             img.save()
         return out_path
     finally:
-        if restore is not None:
-            restore()
+        if sub is not None:
+            sub.cleanup()
         if img.name in bpy.data.images:
             bpy.data.images.remove(img, do_unlink=True)
+
+
+class _EmitSubstitute:
+    """A throwaway copy of a material in which every Principled BSDF (at any group depth) is replaced
+    by an Emission carrying one of its inputs (its link, or its constant). Mix / Add shaders are kept,
+    so the EMIT bake returns the channel blended exactly like the shaders were; a Transparent cutout
+    branch is bypassed (its mask is baked separately into alpha — leaving it would darken the colour
+    at the cut edges). Node groups are copied too (single-user), so shared groups never change.
+
+    `.material` = the copy (None if the material holds no Principled); `.constant` = True when there
+    is a single Principled with that input unlinked (nothing to bake). Call `.cleanup()`."""
+
+    def __init__(self, mat, input_name):
+        self.material, self.constant, self._groups = None, False, []
+        self._copy = mat.copy()
+        try:
+            self._build(mat, input_name)
+        except Exception:
+            self.cleanup()                     # never leak the copy / copied groups on a failure
+            raise
+
+    def _build(self, mat, input_name):
+        self._copy.name = "_wl_bake_" + mat.name
+        self._single_user(self._copy.node_tree)
+        trees = [self._copy.node_tree] + self._groups
+        principled, linked = 0, 0
+        for nt in trees:
+            for n in list(nt.nodes):
+                if n.type != "BSDF_PRINCIPLED":
+                    continue
+                principled += 1
+                inp = n.inputs.get(input_name)
+                em = nt.nodes.new("ShaderNodeEmission")
+                if inp is not None and inp.is_linked:
+                    linked += 1
+                    nt.links.new(inp.links[0].from_socket, em.inputs["Color"])
+                elif inp is not None:
+                    v = inp.default_value
+                    em.inputs["Color"].default_value = (
+                        (float(v), float(v), float(v), 1.0) if isinstance(v, float) else tuple(v))
+                for out in n.outputs:
+                    for l in list(out.links):
+                        nt.links.new(em.outputs["Emission"], l.to_socket)
+        if principled == 0:
+            return
+        if linked == 0 and principled == 1:
+            self.constant = True
+            return
+        pm = bsdf_trace.build_local_parent_map(self._copy.node_tree)
+        for nt in trees:
+            for n in list(nt.nodes):
+                if n.type != "MIX_SHADER" or len(n.inputs) < 3:
+                    continue
+                kinds = [bsdf_trace._shader_source_type(n.inputs[i], nt, pm) for i in (1, 2)]
+                if "BSDF_TRANSPARENT" in kinds and kinds[0] != kinds[1]:
+                    keep = n.inputs[2 if kinds[0] == "BSDF_TRANSPARENT" else 1]
+                    if keep.is_linked:
+                        src = keep.links[0].from_socket
+                        for l in list(n.outputs[0].links):
+                            nt.links.new(src, l.to_socket)
+        self.material = self._copy
+
+    def _single_user(self, nt):
+        for n in nt.nodes:
+            if n.type == "GROUP" and n.node_tree is not None:
+                g = n.node_tree.copy()
+                self._groups.append(g)
+                n.node_tree = g
+                self._single_user(g)
+
+    def cleanup(self):
+        if self._copy is not None and self._copy.name in bpy.data.materials:
+            bpy.data.materials.remove(self._copy, do_unlink=True)
+        for g in reversed(self._groups):
+            if g.name in bpy.data.node_groups:
+                bpy.data.node_groups.remove(g, do_unlink=True)
+        self._copy, self._groups = None, []
+
+
+def _emit_substitute(mat, input_name):
+    return _EmitSubstitute(mat, input_name)
 
 
 def extract_orm_channel(image, index, out_path):

@@ -4,7 +4,7 @@ Source of the Blender 4.2+ extension (this folder = build root, zipped for insta
 
 | File | Role | Dependencies | Plans |
 |---|---|---|---|
-| `blender_manifest.toml` | Extension manifest (id, version, min 4.2.0, `files` permission, GPL license) | — | chunk-01 |
+| `blender_manifest.toml` | Extension manifest (id, version **0.9.0**, min 4.2.0, `files` permission, GPL license) | — | chunk-01; community-feedback-2026-11 |
 | `__init__.py` | `register`/`unregister` — delegates to `ui` | `bpy`, `ui` | chunk-01 / chunk-06 |
 | `skeleton.json` | Bundled collection skeleton (real header, emptied arrays) — base of the `.wlsave`. **Save format v18** (`version:18`, `luaVersion:15`) | — | chunk-01; v18 bump in [full-material-export](../docs/plans/features/full-material-export/plan.md) |
 | `mapper.py` | `NormalizedMaterial` → `customMaterials` entry. Emits the **complete v18 struct (24 fields, game key order)**. Single source of truth (the Studio `mapMaterial.js` it was ported from was removed). `textureTiling` = **reciprocal** of Blender's Mapping Scale (`_inv_scale`). **`type` decision table** (first-match-wins: Glass/Refraction/Transmission/Transparent BSDF → Transparent; linked-Alpha/Mix-Fac/Alpha-tex → Masked; constant α<0.99 → Transparent) + group-resolved `refraction` (clamp `[1,3]`, 1.45 fallback) | — (pure, no `bpy`) | chunk-04; full-material-export; [tiling-reciprocal](../docs/plans/features/tiling-reciprocal/plan.md); [material-type-fidelity](../docs/plans/features/material-type-fidelity/plan.md) |
@@ -292,7 +292,35 @@ object-parented empty and asserts the bpy readers' tree (nesting, pruning, exclu
 across SCENE and COLLECTION scope. Plan:
 [`../docs/plans/features/collection-hierarchy/plan.md`](../docs/plans/features/collection-hierarchy/plan.md).
 
-Tests (`../tests/`): `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
+**Community feedback fixes — v0.9.0 (validated in game, 2026-11-21).** Plan + causes:
+[`../docs/plans/features/community-feedback-2026-11/plan.md`](../docs/plans/features/community-feedback-2026-11/plan.md).
+`bake.py`: Base Color / Roughness EMIT-baked (DIFFUSE pass was black on metal, ROUGHNESS pass ignored
+Math), native pass only as fallback (`_NATIVE_FALLBACK`); placeholder plane carries every UV name the
+material uses (`_uv_names_used`); alpha mask from `bsdf_trace.find_alpha_mask` (Principled Alpha or a
+Transparent-vs-BSDF Mix Shader, groups included) via `_emit_rewire_socket`. `ui.py`: packed/generated
+images are never baked (`_NO_BAKE_REASONS`); Scene mode adds `instanced_source_objects` to the
+material + OBJ inputs. `bsdf_trace.py`: every visited-set keyed by `_ptr` (as_pointer) — `id()` of
+rebuilt bpy wrappers was reused and dropped normal maps; a Bump's Normal input is transparent (normal
+map stays direct, height to its slot); `find_alpha_mask`/`_to_top_level`. `introspect.py`:
+`separateAlphaMask`. `mapper.py`: `alpha-mask` bake candidate; roughness/metallic scalar = 1.0 when a
+texture is shipped (WL multiplies texture × scalar — measured in game); transmission glass →
+`color.a = 1 − 0.85·t`. `scene_introspect.py`: Instance Collections expanded
+(`expand_collection_instances`, namespaced `guid_key`, nested, offset-aware). `export_limits.py`:
+`as_pointer` visited key. `obj_export.format_obj_text`: faces grouped by material slot in slot order
+(was mesh face order → sections swapped vs CustomMaterial{i} on 13/24 multi-material meshes).
+Second pass: `bake._EmitSubstitute` (throwaway material + group copy, every Principled → Emission of
+the channel, any depth / mixed); `bsdf_trace._shader_source_type` (mask through groups);
+`mapper.DEFAULT_GLASS_OPACITY` 0.05 + `glass_opacity` param ← `ui.minervha_glass_opacity` via
+`tex_opts`; `scene_introspect.expand_depsgraph_instances` / `_depsgraph_instances` (GN / particles /
+VERTS-FACES via `object_instances`, geometry instances copied to temp meshes flagged
+`_wl_temp_geo`, `cleanup_instance_cache` in `ui._cleanup`, `MAX_DEPSGRAPH_INSTANCES`,
+`LAST_INSTANCE_STATS` → report `instanceStats`); `obj_export._read_obj_arrays` reads a temp-geo
+object's mesh as-is; `ui._make_material_baker` decides bakes on a probe norm with packed textures
+treated as resolved. Tests: `verify_depsgraph_instances_live.py`, `test_glass_opacity.py`.
+
+Tests (`../tests/`): `verify_collection_instances_live.py` (expanded instances match Blender's
+depsgraph instance matrices, nested + excluded source); `verify_bake_fidelity_live.py` (metal Base
+Color, named-UV normal, Math roughness, Mix Shader alpha mask); `test_mapper.py` (regression snapshot of `mapper.py` + `run_semantic()` asserting the
 Phase-1 shading-compat signals — triplanar / loss notes / `bakeCandidates` — across 7 new fixtures), fixtures
 + golden regenerable via `_gen_golden.py`; `test_sanitize.py` (filename sanitization — units + end-to-end `build_wlsave`, pure Python);
 `test_tiling.py` (`textureTiling` = reciprocal of Blender Mapping Scale);

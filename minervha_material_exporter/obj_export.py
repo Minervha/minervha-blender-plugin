@@ -247,8 +247,13 @@ def format_obj_text(arrays, mtl_name=None):
     has_uv = uvs is not None
     has_n = normals is not None
     has_mats = bool(slots)                              # a mesh with NO material slots emits no usemtl
+    # Faces GROUPED by material slot, in slot order (stable), exactly like wm.obj_export. WL maps the
+    # material sections to CustomMaterial{i} by order; writing faces in mesh order made the section of
+    # whichever slot owns the FIRST face come first — a column whose first face was its lattice sleeve
+    # (slot 1) got the shaft's material and vice versa.
+    face_order = (sorted(range(len(ls)), key=lambda f: int(mi[f])) if has_mats else range(len(ls)))
     cur = None
-    for f in range(len(ls)):
+    for f in face_order:
         if has_mats:
             m = int(mi[f])
             if m != cur:
@@ -281,9 +286,14 @@ def _read_obj_arrays(obj, global_scale):
     empty mesh or without bpy/numpy. Fast: a few `foreach_get` calls (~0.2 ms for a small mesh)."""
     if bpy is None or np is None:
         return None
-    dg = bpy.context.evaluated_depsgraph_get()
-    ev = obj.evaluated_get(dg)
-    me = ev.to_mesh()
+    if obj.get("_wl_temp_geo"):
+        # A geometry-instance copy (scene_introspect): already evaluated, linked to no scene -> its
+        # mesh is read as-is (evaluated_get would fail: the object is in no depsgraph).
+        ev, me = None, obj.data
+    else:
+        dg = bpy.context.evaluated_depsgraph_get()
+        ev = obj.evaluated_get(dg)
+        me = ev.to_mesh()
     try:
         npoly = len(me.polygons)
         nv = len(me.vertices)
@@ -316,7 +326,8 @@ def _read_obj_arrays(obj, global_scale):
                 "loop_start": ls, "loop_total": lt, "mat_index": mat_index,
                 "slots": slots, "mirrored": mirrored}
     finally:
-        ev.to_mesh_clear()
+        if ev is not None:
+            ev.to_mesh_clear()
 
 
 def write_obj_direct(src_object, dest_dir, used_basenames, write_mtl=True, global_scale=1.0):

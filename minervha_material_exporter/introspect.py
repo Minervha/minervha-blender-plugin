@@ -270,6 +270,19 @@ def normalize_material(mat):
         if len(imgs) >= 2:
             multi_texture_channels.append(ch)
 
+    # Opacity mask NOT carried by the Base Color image's own alpha channel: a separate opacity map on
+    # Principled Alpha, or a Mix Shader cutout (Transparent vs BSDF — the DAZ "Transparent" group).
+    # WL reads the mask from the diffuse texture's alpha, so the diffuse must be baked WITH that mask,
+    # else foliage ships as an RGB JPEG and renders as solid quads.
+    separate_alpha_mask = False
+    mask = bsdf_trace.find_alpha_mask(mat.node_tree, parent_map)
+    if mask is not None:
+        src, invert = mask
+        diffuse_imgs = {t["name"] for t in tex_list if "Base Color" in (t.get("directSlots") or [])}
+        own_alpha = (not invert and src.node.type == 'TEX_IMAGE' and src.name == 'Alpha'
+                     and src.node.image is not None and src.node.image.name in diffuse_imgs)
+        separate_alpha_mask = not own_alpha
+
     # Irreducible losses: Principled features with no WL slot (not even via baking).
     lossy_features = []
     for p_node, _ in principled:
@@ -300,6 +313,7 @@ def normalize_material(mat):
         "consumedByNoUvObject": False,  # set by collect() once object context is known
         "dynamicChannels": dynamic_channels,
         "multiTextureChannels": multi_texture_channels,
+        "separateAlphaMask": separate_alpha_mask,
         "lossyFeatures": lossy_features,
         "perMeshDependency": _per_mesh_dependency(mat),
         "principledNodeCount": principled_with_unlinked, "textures": tex_list,
