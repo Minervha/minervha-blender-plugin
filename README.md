@@ -38,6 +38,12 @@ its materials. A **Target** dropdown then chooses what the `.wlsave` becomes: a 
 or *Old Wild Life Map*. The Studio installs a collection under `Collections/` and a map save under
 `MySaves/<map>/`.
 
+**Instances**: Instance Collections, Geometry Nodes instances (e.g. *Instance on Points*), particle
+systems rendered as objects and instancing on vertices/faces are all exported — each instance becomes
+a real object at its exact place, under its instancer, and instances of one mesh share a single model
+file. Above 10,000 Geometry Nodes / particle instances nothing is expanded and the export warns you
+(too many objects for the game).
+
 **Textures** (the *Textures* box): by default opaque textures are re-encoded to **JPG** at an adjustable
 quality (smaller files), while textures with an alpha channel always stay **PNG**. Enable
 *Keep normal maps as PNG* (off by default) to never JPG-encode normal maps — JPG's lossy compression
@@ -45,6 +51,10 @@ mangles tangent-space normals into blocky shading. An optional
 **Max resolution** cap downscales anything larger (aspect ratio kept). Packed/generated images and other
 formats (`.tga`, `.exr`…) are re-exported automatically. Turn *Prefer JPG over PNG* off to keep on-disk
 PNG/JPG as-is and re-export the rest to PNG.
+
+*Glass opacity* (default 0.05) sets the in-game opacity of fully transmissive glass (Principled
+Transmission / Glass BSDF): Wild Life reads a transparent material's opacity from its colour alpha,
+and 0.05 matches Blender's clear glass. The glass tint is kept.
 
 *Override specular* (off by default) forces every exported material's specular to one fixed value (0–1),
 ignoring each material's own *Specular IOR Level* — handy for matching a whole kit's look in-game without

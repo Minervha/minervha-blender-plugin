@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "minervha_material_exporter"
-version = "0.8.3"
+version = "0.9.0"
 name = "Minervha Exporter"
 tagline = "Export Blender materials and scenes to Wild Life saves"
 maintainer = "Minervha Studio <217040744+Minervha@users.noreply.github.com>"
@@ -12,7 +12,7 @@ tags = ["Import-Export", "Material"]
 
 blender_version_min = "4.2.0"
 
-# bpy add-ons are derivative works of Blender → must be GPL-compatible.
+# bpy add-ons are derivative works of Blender â†’ must be GPL-compatible.
 license = ["SPDX:GPL-3.0-or-later"]
 
 # The add-on reads texture files and writes a .wlsave export to a user-chosen
